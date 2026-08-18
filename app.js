@@ -84,6 +84,14 @@ async function handleCreateCompany() {
       companyName: name,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+    // Seed this company's own settings/company doc so Company Info,
+    // receipts, and the sidebar all show the name right away.
+    try {
+      await db.collection('companies').doc(companyRef.id).collection('settings').doc('company').set({
+        name,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (se) { console.error('seed settings/company failed', se); }
     // re-run the login flow now that a company exists
     await enterAdminApp({ companyId: companyRef.id, role: 'admin', companyName: name }, user);
   } catch (e) {
@@ -101,7 +109,10 @@ async function enterAdminApp(info, user) {
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('appScreen').classList.remove('hidden');
   document.getElementById('userEmailDisplay').textContent = user.email;
+  const sidebarNameEl = document.getElementById('sidebarCompanyName');
+  if (sidebarNameEl && info.companyName) sidebarNameEl.textContent = info.companyName;
   try { await loadCompanyInfo(); } catch (e) {}
+  if (sidebarNameEl && companyInfo.name) sidebarNameEl.textContent = companyInfo.name;
   try { await loadWaTemplate(); } catch (e) {}
   try { flushOfflineQueue(); } catch (e) {}
   loadDashboard();
@@ -3308,11 +3319,11 @@ function refreshCustomerMsoDropdown() {
 }
 
 let companyInfo = {
-  name: 'Smart Cable Manager',
-  address: 'My Cable Network',
-  phone: '0452-2527545',
-  phone2: '8678953333',
-  gpay: '9442527545'
+  name: 'My Cable Network',
+  address: '',
+  phone: '',
+  phone2: '',
+  gpay: ''
 };
 
 
@@ -3368,7 +3379,7 @@ async function loadCompanyInfo() {
 
 async function saveCompanyInfo() {
   companyInfo = {
-    name: document.getElementById('coName').value.trim() || 'Smart Cable Manager',
+    name: document.getElementById('coName').value.trim() || 'My Cable Network',
     phone: document.getElementById('coPhone').value.trim(),
     phone2: (document.getElementById('coPhone2') || {}).value || '',
     gpay: (document.getElementById('coGpay') || {}).value || '',
@@ -3380,6 +3391,8 @@ async function saveCompanyInfo() {
     ...companyInfo,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   }, { merge: true });
+  const sidebarNameEl = document.getElementById('sidebarCompanyName');
+  if (sidebarNameEl) sidebarNameEl.textContent = companyInfo.name;
   showToast('Company saved ✓');
   const msg = document.getElementById('coSavedMsg');
   if (msg) {
