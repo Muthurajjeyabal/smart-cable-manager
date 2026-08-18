@@ -51,6 +51,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
   <style>
     * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
@@ -409,6 +410,9 @@
         </button>
         <button onclick="openMastersPanel('place')" class="sidebar-item w-full flex items-center gap-3 px-3 py-2 text-left text-sm" data-page="masters-place">
           <span class="w-5 text-center opacity-80">📍</span> <span data-i18n="placeArea">Place / Area</span>
+        </button>
+        <button onclick="openMastersPanel('importcust')" class="sidebar-item w-full flex items-center gap-3 px-3 py-2 text-left text-sm" data-page="masters-importcust">
+          <span class="w-5 text-center opacity-80">⬆️</span> <span data-i18n="importCustomers">Import Customers</span>
         </button>
         <button onclick="openMastersPanel('package')" class="sidebar-item w-full flex items-center gap-3 px-3 py-2 text-left text-sm" data-page="masters-package">
           <span class="w-5 text-center opacity-80">▦</span> <span data-i18n="packages">Packages</span>
@@ -1584,6 +1588,9 @@
             <button type="button" onclick="showMasterPanel('place')" class="bg-white rounded-xl p-4 shadow-sm border text-center hover:shadow-md">
               <div class="text-2xl mb-1">📍</div><div class="font-medium text-sm">Place / Area</div>
             </button>
+            <button type="button" onclick="showMasterPanel('importcust')" class="bg-white rounded-xl p-4 shadow-sm border text-center hover:shadow-md">
+              <div class="text-2xl mb-1">⬆️</div><div class="font-medium text-sm">Import Customers</div>
+            </button>
             <button type="button" onclick="showMasterPanel('company')" class="bg-white rounded-xl p-4 shadow-sm border text-center hover:shadow-md">
               <div class="text-2xl mb-1">🏢</div><div class="font-medium text-sm">Company Info</div>
             </button>
@@ -1689,7 +1696,47 @@
             </div>
           </div>
 
-          <!-- COMPANY PANEL -->
+          <!-- IMPORT CUSTOMERS PANEL -->
+          <div id="masterPanel-importcust" class="master-panel hidden">
+            <button type="button" onclick="showMasterPanel(null)" class="text-sm text-blue-600 mb-2">← Back</button>
+            <div class="bg-white rounded-xl border p-4 mb-4">
+              <h3 class="font-semibold mb-2 text-sm">Import Customers (Excel / CSV)</h3>
+              <p class="text-xs text-slate-500 mb-3">வேற billing software-ல் இருந்து customers list Excel-ஆ export பண்ணி இருந்தா, இங்க ஒரே தடவையில் bulk-ஆ இந்த app-க்குள் கொண்டு வரலாம்.</p>
+              <ol class="text-xs text-slate-600 space-y-1 mb-3 list-decimal pl-4">
+                <li>கீழே "Download Template" press பண்ணி, sample Excel file-ஐ பாருங்கள் — column headers exact-ஆ இதே மாதிரி இருக்கணும்.</li>
+                <li>உங்க operator-ஓட Excel file-ஐ இதே column பெயர்களுக்கு (அல்லது ஒத்த பெயர்கள்) மாத்தி தயார் பண்ணுங்கள்.</li>
+                <li>Area/Street Setup-ல் முன்னாடியே add பண்ணி இருக்க வேண்டியதில்லை — file-ல் புது Area/Street பெயர் இருந்தா, Import பண்ணும்போது தானாகவே Setup-ல் add ஆகிடும்.</li>
+                <li>கீழே file-ஐ select பண்ணி, preview பாத்து, Import press பண்ணுங்கள்.</li>
+              </ol>
+              <button type="button" onclick="downloadImportTemplate()" class="text-sm bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-lg font-medium mb-3">⬇ Download Template (.xlsx)</button>
+              <div class="border-t pt-3">
+                <label class="text-xs text-slate-500 block mb-1">Excel / CSV file தேர்வு செய்யுங்கள்</label>
+                <input type="file" id="importCustFile" accept=".xlsx,.xls,.csv" onchange="handleImportFile(event)" class="w-full text-sm border rounded-lg px-3 py-2">
+              </div>
+            </div>
+
+            <div id="importPreviewWrap" class="hidden">
+              <div class="bg-white rounded-xl border p-4 mb-4">
+                <div class="flex items-center justify-between mb-2">
+                  <h4 class="font-semibold text-sm">Preview</h4>
+                  <span class="text-xs text-slate-500" id="importRowCount">0 rows</span>
+                </div>
+                <div class="overflow-x-auto max-h-64 overflow-y-auto border rounded-lg">
+                  <table class="w-full text-xs">
+                    <thead class="bg-slate-50" id="importPreviewHead"></thead>
+                    <tbody id="importPreviewBody"></tbody>
+                  </table>
+                </div>
+                <p class="text-[11px] text-amber-700 mt-2">Name மற்றும் Mobile இல்லாத rows import-ல் skip ஆகும்.</p>
+                <button type="button" onclick="runCustomerImport()" id="importRunBtn" class="mt-3 w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium">Import Now</button>
+              </div>
+            </div>
+
+            <div id="importResultWrap" class="hidden bg-white rounded-xl border p-4">
+              <h4 class="font-semibold text-sm mb-2">Result</h4>
+              <div id="importResultText" class="text-sm text-slate-700"></div>
+            </div>
+          </div>
           <div id="masterPanel-company" class="master-panel hidden">
             <button type="button" onclick="showMasterPanel(null)" class="text-sm text-blue-600 mb-2">← Back</button>
             <div class="bg-white rounded-xl border p-4 max-w-lg">

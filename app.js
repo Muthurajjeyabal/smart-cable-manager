@@ -3086,6 +3086,7 @@ function showMasterPanel(name) {
   if (name === 'company') loadCompanyInfo();
   if (name === 'place') loadPlacesMaster();
   if (name === 'employee') loadEmployees();
+  if (name === 'importcust') resetImportUI();
 }
 
 let placesMasterCache = [];
@@ -3185,8 +3186,248 @@ function populateAreaSelects() {
   }
 }
 
-let packageMasterCache = [];
-let msoMasterCache = [];
+// ==================== IMPORT CUSTOMERS (EXCEL / CSV) ====================
+const IMPORT_TEMPLATE_HEADERS = [
+  'Name', 'Mobile', 'Area', 'Street', 'Customer ID', 'MSO',
+  'Box No', 'Smart Card No', 'Box Type', 'Package Name',
+  'Package Amount', 'Due Amount', 'Connection Date', 'Remarks'
+];
+
+// Flexible header aliases so real-world exports (different wording/case)
+// still map correctly onto our fields.
+const IMPORT_FIELD_ALIASES = {
+  name: ['name', 'customer name', 'customername', 'cust name'],
+  mobile: ['mobile', 'phone', 'mobile no', 'mobileno', 'contact', 'phone no'],
+  place: ['area', 'place', 'place / area', 'zone'],
+  street: ['street', 'street name', 'address', 'road'],
+  custId: ['customer id', 'custid', 'cust id', 'id', 'subscriber id'],
+  mso: ['mso', 'mso code', 'operator code'],
+  boxNo: ['box no', 'boxno', 'stb no', 'stb number', 'box number'],
+  scNo: ['smart card no', 'sc no', 'scno', 'smart card', 'sc'],
+  boxType: ['box type', 'boxtype', 'hd/sd', 'type'],
+  package: ['package name', 'package', 'plan', 'plan name'],
+  packageAmt: ['package amount', 'amount', 'plan amount', 'monthly amount'],
+  dueAmt: ['due amount', 'due', 'balance', 'outstanding'],
+  conDate: ['connection date', 'condate', 'joining date', 'install date'],
+  remarks: ['remarks', 'notes', 'comment', 'comments']
+};
+
+let importParsedRows = [];   // raw objects straight from the sheet
+let importMappedRows = [];   // normalized to our field names
+
+function resetImportUI() {
+  importParsedRows = [];
+  importMappedRows = [];
+  const fileEl = document.getElementById('importCustFile');
+  if (fileEl) fileEl.value = '';
+  document.getElementById('importPreviewWrap')?.classList.add('hidden');
+  document.getElementById('importResultWrap')?.classList.add('hidden');
+}
+
+function downloadImportTemplate() {
+  const sample = [
+    IMPORT_TEMPLATE_HEADERS,
+    ['Ravi Kumar', '9876543210', 'AREA 1', 'Main Street', '', 'MSO001', 'BOX1001', 'SC1001', 'HD', 'PLAN 300', '300', '0', '2026-01-15', '']
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(sample);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Customers');
+  XLSX.writeFile(wb, 'customer_import_template.xlsx');
+}
+
+function normalizeHeaderKey(h) {
+  return String(h || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function mapRowToFields(row) {
+  // row: object keyed by original sheet headers
+  const out = {};
+  const lowerKeyMap = {};
+  Object.keys(row).forEach(k => { lowerKeyMap[normalizeHeaderKey(k)] = row[k]; });
+  Object.keys(IMPORT_FIELD_ALIASES).forEach(field => {
+    const aliases = IMPORT_FIELD_ALIASES[field];
+    for (const a of aliases) {
+      if (lowerKeyMap[a] !== undefined && String(lowerKeyMap[a]).trim() !== '') {
+        out[field] = String(lowerKeyMap[a]).trim();
+        return;
+      }
+    }
+    out[field] = '';
+  });
+  return out;
+}
+
+function handleImportFile(evt) {
+  const file = evt.target.files && evt.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+      importParsedRows = rows;
+      importMappedRows = rows.map(mapRowToFields);
+      renderImportPreview();
+    } catch (err) {
+      showToast('File படிக்க முடியவில்லை: ' + err.message, true);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function renderImportPreview() {
+  const wrap = document.getElementById('importPreviewWrap');
+  const head = document.getElementById('importPreviewHead');
+  const body = document.getElementById('importPreviewBody');
+  const cntEl = document.getElementById('importRowCount');
+  if (!wrap || !head || !body) return;
+  if (!importMappedRows.length) {
+    wrap.classList.add('hidden');
+    showToast('File-ல் data எதுவும் இல்லை', true);
+    return;
+  }
+  wrap.classList.remove('hidden');
+  document.getElementById('importResultWrap')?.classList.add('hidden');
+  if (cntEl) cntEl.textContent = importMappedRows.length + ' rows';
+  const cols = ['name', 'mobile', 'place', 'street', 'boxNo', 'package', 'dueAmt'];
+  head.innerHTML = '<tr>' + cols.map(c => `<th class="px-2 py-1.5 text-left font-medium">${c}</th>`).join('') + '</tr>';
+  body.innerHTML = importMappedRows.slice(0, 8).map(r => {
+    const missing = !r.name || !r.mobile;
+    return `<tr class="border-t ${missing ? 'bg-red-50' : ''}">` +
+      cols.map(c => `<td class="px-2 py-1.5">${r[c] || '-'}</td>`).join('') + '</tr>';
+  }).join('') + (importMappedRows.length > 8 ? `<tr><td colspan="${cols.length}" class="px-2 py-1.5 text-center text-slate-400">+ ${importMappedRows.length - 8} more rows</td></tr>` : '');
+}
+
+async function runCustomerImport() {
+  if (!importMappedRows.length) return;
+  const btn = document.getElementById('importRunBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Importing...'; }
+  let added = 0, skipped = 0, errors = 0;
+  let placesCreated = 0, streetsCreated = 0;
+  const skipReasons = [];
+
+  // Make sure we have the latest Place/Street masters before checking
+  // what's missing.
+  try { if (typeof loadPlacesMaster === 'function') await loadPlacesMaster(); } catch (e) {}
+  try { if (typeof loadStreetMaster === 'function') await loadStreetMaster(); } catch (e) {}
+
+  const existingPlaceNames = new Set((placesMasterCache || []).map(p => String(p.name || '').toUpperCase().trim()));
+  const existingStreetKeys = new Set((streetMasterCache || []).map(s => (s.place || '').toUpperCase().trim() + '||' + (s.street || '').toUpperCase().trim()));
+  const usedStreetIds = new Set((streetMasterCache || []).map(s => String(s.streetId || '').toUpperCase().trim()).filter(Boolean));
+
+  function makeStreetIdCode(streetName) {
+    let base = String(streetName || 'ST').replace(/\s+/g, '').replace(/[^A-Za-z0-9அ-ஹ]/g, '').slice(0, 3).toUpperCase() || 'STR';
+    let code = base, n = 1;
+    while (usedStreetIds.has(code)) { n++; code = base + n; }
+    usedStreetIds.add(code);
+    return code;
+  }
+
+  // Auto-create any Area / Street combinations from the file that don't
+  // exist yet in the masters, so the operator doesn't have to pre-type
+  // every street by hand before importing.
+  for (const r of importMappedRows) {
+    const place = (r.place || '').trim();
+    const street = (r.street || '').trim();
+    if (!place && !street) continue;
+
+    if (place) {
+      const placeKey = place.toUpperCase();
+      if (!existingPlaceNames.has(placeKey)) {
+        try {
+          await col('places').add({ name: place, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+          existingPlaceNames.add(placeKey);
+          placesCreated++;
+        } catch (e) { console.error('auto-create place failed', e); }
+      }
+    }
+    if (place && street) {
+      const streetKey = place.toUpperCase() + '||' + street.toUpperCase();
+      if (!existingStreetKeys.has(streetKey)) {
+        const streetId = makeStreetIdCode(street);
+        try {
+          await col('streets').add({
+            place, street, streetId,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          streetMasterCache.push({ place, street, streetId });
+          existingStreetKeys.add(streetKey);
+          streetsCreated++;
+        } catch (e) { console.error('auto-create street failed', e); }
+      }
+    }
+  }
+  // Refresh caches + dropdowns now that new places/streets may exist
+  try { if (typeof loadPlacesMaster === 'function') await loadPlacesMaster(); } catch (e) {}
+  try { if (typeof loadStreetMaster === 'function') await loadStreetMaster(); } catch (e) {}
+
+  for (const r of importMappedRows) {
+    if (!r.name || !r.mobile) {
+      skipped++;
+      skipReasons.push((r.name || '(no name)') + ' — Name/Mobile missing');
+      continue;
+    }
+    try {
+      const place = r.place || '';
+      const street = r.street || '';
+      let custId = r.custId || '';
+      if (!custId && place && street) {
+        try {
+          const streetId = getStreetId(place, street);
+          const nextNum = getNextNumberForStreet(streetId, street);
+          custId = streetId + nextNum;
+        } catch (ge) { /* leave custId blank if generation fails */ }
+      }
+      const data = {
+        name: r.name,
+        mobile: r.mobile,
+        place,
+        street,
+        custId,
+        mso: r.mso || '',
+        boxNo: r.boxNo || '',
+        scNo: r.scNo || '',
+        smartCard: r.scNo || '',
+        boxType: r.boxType || 'SD',
+        package: r.package || '',
+        packageAmt: Number(r.packageAmt) || 0,
+        packageBase: Number(r.packageAmt) || 0,
+        dueAmt: Number(r.dueAmt) || 0,
+        conDate: r.conDate || '',
+        status: 'ACT',
+        sms: 'Yes',
+        signal: 'Digital',
+        remarks: r.remarks || '',
+        importedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      await col('customers').add(data);
+      added++;
+    } catch (e) {
+      errors++;
+      skipReasons.push((r.name || '') + ' — Error: ' + e.message);
+    }
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = 'Import Now'; }
+  const resultWrap = document.getElementById('importResultWrap');
+  const resultText = document.getElementById('importResultText');
+  if (resultWrap && resultText) {
+    resultWrap.classList.remove('hidden');
+    resultText.innerHTML =
+      `<div class="text-emerald-700 font-medium">✓ Added: ${added}</div>` +
+      (placesCreated ? `<div class="text-blue-700">புது Areas created: ${placesCreated}</div>` : '') +
+      (streetsCreated ? `<div class="text-blue-700">புது Streets created: ${streetsCreated}</div>` : '') +
+      `<div class="text-amber-700">Skipped: ${skipped}</div>` +
+      (errors ? `<div class="text-red-600">Errors: ${errors}</div>` : '') +
+      (skipReasons.length ? `<div class="mt-2 text-xs text-slate-500 max-h-32 overflow-y-auto">${skipReasons.slice(0, 20).map(s => '• ' + s).join('<br>')}</div>` : '');
+  }
+  showToast('Import முடிந்தது · Added: ' + added);
+  await loadCustomers();
+  if (typeof loadDashboard === 'function') loadDashboard();
+}
 
 async function loadPackageMaster() {
   const snap = await col('packages').orderBy('amount').get().catch(() => col('packages').get());
