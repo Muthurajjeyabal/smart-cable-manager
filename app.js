@@ -30,31 +30,21 @@ let allCustomers = [];
 let selectedBillCustomer = null;
 let currentLedgerCustomerId = null;
 
-// Only these can use Admin app (others = collector app only)
+// Only these can use the Admin app (everyone else = collector app only).
+// Add more owner/admin emails here as needed.
 const ADMIN_EMAILS = [
   'muthurajjeyabal@gmail.com',
-  'muthurajjey@jsvcable.com',
-  'admin@jsvcable.com',
-  'stefi@jsvcable.com',
-  'jeyabal@jsvcable.com',
-];
-// Collectors blocked from admin
-const COLLECTOR_EMAILS = [
-  'uma@jsvcable.com',
-  'muthumari@jsvcable.com',
-  'office@jsvcable.com',
-  'online@jsvcable.com',
 ];
 
 function isAdminUser(user) {
   if (!user || !user.email) return false;
   const email = user.email.toLowerCase();
-  if (COLLECTOR_EMAILS.some(c => email === c || email.startsWith(c.split('@')[0] + '@'))) {
-    return false;
-  }
   if (ADMIN_EMAILS.some(a => email === a.toLowerCase())) return true;
-  // If not in collector list, treat as admin (your main account)
-  if (email.includes('muthuraj')) return true;
+  // Anyone listed in Setup → Collectors with role "admin" also gets admin access.
+  const emp = (allEmployees || []).find(e => String(e.email || '').toLowerCase() === email);
+  if (emp && String(emp.role || '').toLowerCase() === 'admin') return true;
+  // Everyone else (including collectors added in Setup → Collectors) is
+  // routed to the Collector app only.
   return false;
 }
 
@@ -94,6 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('userEmailDisplay').textContent = user.email;
       loadDashboard();
       loadCustomers();
+      if (typeof loadEmployees === 'function') loadEmployees();
     } else {
       currentUser = null;
       document.getElementById('loginScreen').classList.remove('hidden');
@@ -928,8 +919,54 @@ async function toggleDC(id, currentStatus) {
 }
 
 
+// ==================== DYNAMIC AGENT INDEX ====================
+// Built from `employees` collection (allEmployees). No hardcoded person names.
+// Every employee gets a stable key = slugified name. Employees with role
+// 'office' or 'online' map to the fixed 'office' / 'online' payment-channel
+// buckets; everyone else (role 'collector' / 'admin' / blank) is a field
+// collector tracked under their own key.
+let AGENT_INDEX = {};   // lowercase token (email / email-prefix / name / name-no-space) -> {key, name}
+let AGENT_LIST = [];    // ordered [{key, name, role}] for rendering
+
+function slugifyAgentName(name) {
+  return String(name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'agent';
+}
+
+function buildAgentIndex() {
+  AGENT_INDEX = {};
+  const list = [];
+  const seenKeys = new Set();
+  (allEmployees || []).forEach(e => {
+    const role = String(e.role || '').toLowerCase().trim();
+    const name = String(e.name || '').trim();
+    if (!name) return;
+    const isOffice = role === 'office';
+    const isOnline = role === 'online';
+    const key = isOffice ? 'office' : (isOnline ? 'online' : slugifyAgentName(name));
+    const email = String(e.email || '').toLowerCase().trim();
+    const emailPrefix = email.split('@')[0];
+    const nameLower = name.toLowerCase();
+    const nameNoSpace = nameLower.replace(/\s+/g, '');
+    [email, emailPrefix, nameLower, nameNoSpace].forEach(tok => {
+      if (tok) AGENT_INDEX[tok] = { key, name: isOffice ? 'OFFICE' : (isOnline ? 'ONLINE' : name.toUpperCase()) };
+    });
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      list.push({ key, name: isOffice ? 'OFFICE' : (isOnline ? 'ONLINE' : name.toUpperCase()), role: isOffice ? 'office' : (isOnline ? 'online' : 'collector') });
+    }
+  });
+  // Always guarantee Office / Online buckets exist even with no employee doc
+  if (!seenKeys.has('office')) list.push({ key: 'office', name: 'OFFICE', role: 'office' });
+  if (!seenKeys.has('online')) list.push({ key: 'online', name: 'ONLINE', role: 'online' });
+  // Collectors first, then Office, then Online
+  list.sort((a, b) => {
+    const rank = r => (r === 'collector' ? 0 : r === 'office' ? 1 : 2);
+    return rank(a.role) - rank(b.role) || a.name.localeCompare(b.name);
+  });
+  AGENT_LIST = list;
+}
+
 function classifyAgent(d) {
-  // collectedBy = real collector (GPAY/LOCAL/UMA/MUTHUMARI) — highest priority
   if (typeof d === 'string') d = { collectedBy: d };
   const cb = String(d.collectedBy || '').toLowerCase().trim();
   const mode = String(d.mode || '').toLowerCase().trim();
@@ -937,39 +974,47 @@ function classifyAgent(d) {
   const emp = String(d.employee || '').toLowerCase().trim();
   const remarks = String(d.remarks || '').toLowerCase();
 
-  // 1) collectedBy only
-  if (cb) {
-    if (cb.includes('gpay') || cb === 'online' || cb.includes('online')) return 'online';
-    if (cb.includes('local') || cb === 'office' || cb.includes('office')) return 'office';
-    if (cb.includes('muthumari') || cb === 'muthu') return 'muthumari';
-    if (cb === 'uma' || cb.startsWith('uma@') || cb.includes('uma@')) return 'uma';
-  }
-  // 2) remarks from CableSoft import
+  const lookup = (tok) => {
+    if (!tok) return null;
+    if (AGENT_INDEX[tok]) return AGENT_INDEX[tok].key;
+    const prefix = tok.split('@')[0];
+    if (AGENT_INDEX[prefix]) return AGENT_INDEX[prefix].key;
+    return null;
+  };
+
+  // 1) collectedBy — highest priority, match against known employees first
+  let k = lookup(cb);
+  if (k) return k;
+  if (cb.includes('gpay') || cb === 'online' || cb.includes('online')) return 'online';
+  if (cb.includes('local') || cb === 'office' || cb.includes('office')) return 'office';
+
+  // 2) remarks from CableSoft-style import
   if (/collected\s*=\s*gpay/.test(remarks) || remarks.includes('gpay')) return 'online';
   if (/collected\s*=\s*local/.test(remarks)) return 'office';
-  // 3) mode
+
+  // 3) payment mode
   if (mode === 'upi' || mode.includes('gpay')) return 'online';
+
   // 4) createdBy email
+  k = lookup(email);
+  if (k) return k;
   if (email.startsWith('online@')) return 'online';
   if (email.startsWith('office@')) return 'office';
-  if (email.startsWith('muthumari@')) return 'muthumari';
-  if (email.startsWith('uma@')) return 'uma';
-  // 5) employee last (field staff name — do NOT override GPAY/LOCAL)
+
+  // 5) employee field (do NOT override GPAY/LOCAL signals above)
+  k = lookup(emp);
+  if (k) return k;
   if (emp.includes('gpay') || emp.includes('online')) return 'online';
   if (emp.includes('local') || emp.includes('office')) return 'office';
-  if (emp.includes('muthumari')) return 'muthumari';
-  if (emp === 'uma' || emp.startsWith('uma@')) return 'uma';
+
   return 'other';
 }
 
 function displayAgentName(d) {
-  if (typeof d === 'string') {
-    const k = classifyAgent({ collectedBy: d, createdBy: d, employee: d });
-    return ({ uma:'UMA', muthumari:'MUTHUMARI', office:'OFFICE', online:'ONLINE' })[k] || String(d).toUpperCase();
-  }
+  if (typeof d === 'string') d = { collectedBy: d, createdBy: d, employee: d };
   const k = classifyAgent(d);
-  const map = { uma: 'UMA', muthumari: 'MUTHUMARI', office: 'OFFICE', online: 'ONLINE' };
-  if (map[k]) return map[k];
+  const found = AGENT_LIST.find(a => a.key === k);
+  if (found) return found.name;
   const s = String((d && (d.collectedBy || d.employee || d.createdBy)) || '');
   if (s.includes('@')) return s.split('@')[0].toUpperCase();
   if (s && s.length < 20) return s.toUpperCase();
@@ -1778,15 +1823,11 @@ async function loadDashboard() {
   const today = new Date().toISOString().split('T')[0];
   const monthStart = today.slice(0, 8) + '01';
   try {
-    const emptyAgents = () => ({
-      uma: { amt: 0, cnt: 0 },
-      muthumari: { amt: 0, cnt: 0 },
-      office: { amt: 0, cnt: 0 },
-      online: { amt: 0, cnt: 0 },
-      other: { amt: 0, cnt: 0 }
-    });
-    const agentsToday = emptyAgents();
-    const agentsMonth = emptyAgents();
+    if (!AGENT_LIST.length) buildAgentIndex();
+    const emptyBucket = () => ({ amt: 0, cnt: 0 });
+    const agentsToday = { other: emptyBucket() };
+    const agentsMonth = { other: emptyBucket() };
+    AGENT_LIST.forEach(a => { agentsToday[a.key] = emptyBucket(); agentsMonth[a.key] = emptyBucket(); });
 
     const todaySnap = await db.collection('collections').where('date', '==', today).get();
     let todayTotal = 0;
@@ -1795,6 +1836,7 @@ async function loadDashboard() {
       const amt = Number(d.amount || 0);
       todayTotal += amt;
       const key = classifyAgent(d);
+      if (!agentsToday[key]) agentsToday[key] = emptyBucket();
       agentsToday[key].amt += amt;
       agentsToday[key].cnt += 1;
     });
@@ -1808,26 +1850,35 @@ async function loadDashboard() {
       const amt = Number(d.amount || 0);
       monthTotal += amt;
       const key = classifyAgent(d);
+      if (!agentsMonth[key]) agentsMonth[key] = emptyBucket();
       agentsMonth[key].amt += amt;
       agentsMonth[key].cnt += 1;
     });
     const sm = document.getElementById('statMonthCol');
     if (sm) sm.textContent = '₹ ' + monthTotal.toLocaleString('en-IN');
 
-    const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-    setTxt('agentUmaToday', '₹' + agentsToday.uma.amt.toLocaleString('en-IN'));
-    setTxt('agentMuthuToday', '₹' + agentsToday.muthumari.amt.toLocaleString('en-IN'));
-    setTxt('agentOfficeToday', '₹' + agentsToday.office.amt.toLocaleString('en-IN'));
-    setTxt('agentOnlineToday', '₹' + agentsToday.online.amt.toLocaleString('en-IN'));
-    setTxt('agentUma', '₹' + agentsMonth.uma.amt.toLocaleString('en-IN'));
-    setTxt('agentMuthu', '₹' + agentsMonth.muthumari.amt.toLocaleString('en-IN'));
-    setTxt('agentOffice', '₹' + agentsMonth.office.amt.toLocaleString('en-IN'));
-    setTxt('agentOnline', '₹' + agentsMonth.online.amt.toLocaleString('en-IN'));
-    setTxt('agentUmaCnt', agentsToday.uma.cnt + ' today · ' + agentsMonth.uma.cnt + ' month');
-    setTxt('agentMuthuCnt', agentsToday.muthumari.cnt + ' today · ' + agentsMonth.muthumari.cnt + ' month');
-    setTxt('agentOfficeCnt', agentsToday.office.cnt + ' today · ' + agentsMonth.office.cnt + ' month');
-    setTxt('agentOnlineCnt', agentsToday.online.cnt + ' today · ' + agentsMonth.online.cnt + ' month');
-    setTxt('agentOther', '₹' + agentsMonth.other.amt.toLocaleString('en-IN') + ' (' + agentsMonth.other.cnt + ')');
+    const rowsBody = document.getElementById('agentRowsBody');
+    if (rowsBody) {
+      const colors = ['text-blue-600','text-emerald-600','text-violet-600','text-amber-600','text-pink-600','text-cyan-600'];
+      if (!AGENT_LIST.length) {
+        rowsBody.innerHTML = '<tr><td colspan="3" class="py-4 text-center text-slate-400 text-xs">Setup → Collectors-ல் collector add பண்ணுங்கள்</td></tr>';
+      } else {
+        rowsBody.innerHTML = AGENT_LIST.map((a, i) => {
+          const t = agentsToday[a.key] || emptyBucket();
+          const m = agentsMonth[a.key] || emptyBucket();
+          const color = colors[i % colors.length];
+          return `<tr>
+            <td class="py-2.5 font-medium text-slate-700">${a.name}<br><span class="text-[10px] text-slate-400 font-normal">${t.cnt} today · ${m.cnt} month</span></td>
+            <td class="py-2.5 text-right font-bold ${color}">₹${t.amt.toLocaleString('en-IN')}</td>
+            <td class="py-2.5 text-right font-bold text-slate-900">₹${m.amt.toLocaleString('en-IN')}</td>
+          </tr>`;
+        }).join('');
+      }
+    }
+    const otherWrap = document.getElementById('agentOtherWrap');
+    const otherEl = document.getElementById('agentOther');
+    if (otherEl) otherEl.textContent = '₹' + agentsMonth.other.amt.toLocaleString('en-IN') + ' (' + agentsMonth.other.cnt + ')';
+    if (otherWrap) otherWrap.classList.toggle('hidden', agentsMonth.other.cnt === 0);
   } catch (e) {
     console.log('Collection stats error', e);
   }
@@ -3558,10 +3609,8 @@ async function loadEmployees() {
   const el = document.getElementById('empList');
   if (el) el.innerHTML = '<div class="p-3 text-slate-400 text-center text-sm">Loading...</div>';
   const defaults = [
-    { name: 'Muthumari', email: 'muthumari@jsvcable.com', area: 'AREA 1', role: 'collector' },
-    { name: 'Uma', email: 'uma@jsvcable.com', area: 'AREA 2', role: 'collector' },
-    { name: 'Office', email: 'office@jsvcable.com', area: 'ALL', role: 'office' },
-    { name: 'Online', email: 'online@jsvcable.com', area: 'ALL', role: 'online' }
+    { name: 'Office', email: 'office@example.com', area: 'ALL', role: 'office' },
+    { name: 'Online', email: 'online@example.com', area: 'ALL', role: 'online' }
   ];
   try {
     const snap = await db.collection('employees').get();
@@ -3611,6 +3660,10 @@ async function loadEmployees() {
 }
 
 function renderEmployeeList() {
+  buildAgentIndex();
+  if (typeof loadDashboard === 'function' && document.getElementById('agentRowsBody')) {
+    try { loadDashboard(); } catch (e) {}
+  }
   const el = document.getElementById('empList');
   if (!el) return;
   if (!allEmployees.length) {
@@ -3889,9 +3942,11 @@ async function renderAgentDayReport() {
     const amtEl = document.getElementById('agentRepAmt');
     if (cntEl) cntEl.textContent = String(rows.length);
     if (amtEl) amtEl.textContent = '₹' + total.toLocaleString('en-IN');
-    // Agent-wise split (Uma + Muthumari + Office + Online) always under this MSO/date filter
-    const split = { uma: 0, muthumari: 0, office: 0, online: 0, other: 0 };
-    const splitCnt = { uma: 0, muthumari: 0, office: 0, online: 0, other: 0 };
+    // Agent-wise split — dynamic, built from AGENT_LIST (Setup → Collectors)
+    if (!AGENT_LIST.length) buildAgentIndex();
+    const split = { other: 0 };
+    const splitCnt = { other: 0 };
+    AGENT_LIST.forEach(a => { split[a.key] = 0; splitCnt[a.key] = 0; });
     rows.forEach(r => {
       const k = r._agent || 'other';
       if (split[k] == null) { split.other += Number(r.amount||0); splitCnt.other++; }
@@ -3899,12 +3954,8 @@ async function renderAgentDayReport() {
     });
     const splitEl = document.getElementById('agentRepSplit');
     if (splitEl) {
-      splitEl.innerHTML = [
-        ['UMA', split.uma, splitCnt.uma],
-        ['MUTHUMARI', split.muthumari, splitCnt.muthumari],
-        ['OFFICE', split.office, splitCnt.office],
-        ['ONLINE', split.online, splitCnt.online]
-      ].map(([n,a,c]) => `<div class="text-center p-1.5 bg-slate-50 rounded-lg">
+      splitEl.innerHTML = AGENT_LIST.map(a => [a.name, split[a.key] || 0, splitCnt[a.key] || 0])
+      .map(([n,a,c]) => `<div class="text-center p-1.5 bg-slate-50 rounded-lg">
           <div class="text-[9px] text-slate-400">${n}</div>
           <div class="text-xs font-bold">₹${a.toLocaleString('en-IN')}</div>
           <div class="text-[9px] text-slate-400">${c} bills</div>
@@ -4817,7 +4868,7 @@ async function renderColAuditReport() {
       if (ag === 'ONLINE' || m.includes('UPI') || m.includes('GPAY') || m.includes('ONLINE')) {
         byAgent[a].upi += amt;
         totalUpi += amt;
-      } else if (m.includes('CASH') || !m || ag === 'UMA' || ag === 'MUTHUMARI' || ag === 'OFFICE') {
+      } else if (m.includes('CASH') || !m || ag !== 'ONLINE') {
         byAgent[a].cash += amt;
         totalCash += amt;
       } else {
@@ -5162,7 +5213,12 @@ function openReport(kind) {
     if (f && !f.value) f.value = t.slice(0, 8) + '01';
     if (to && !to.value) to.value = t;
     const whoEl = document.getElementById('agentRepWho');
-    if (whoEl) whoEl.value = 'ALL'; // MSO view = all collectors
+    if (whoEl) {
+      if (!AGENT_LIST.length) buildAgentIndex();
+      whoEl.innerHTML = '<option value="ALL">All</option>' +
+        AGENT_LIST.map(a => `<option value="${a.key}">${a.name}</option>`).join('');
+      whoEl.value = 'ALL'; // MSO view = all collectors
+    }
     fillAgentRepMsoOptions();
     renderAgentDayReport();
     return;

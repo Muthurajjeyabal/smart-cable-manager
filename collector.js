@@ -38,19 +38,17 @@ async function loadEmployeeMap() {
   } catch (e) {
     console.error('employees load', e);
   }
-  // fallback if empty
+  // fallback if `employees` collection is empty — generic Office/Online only.
+  // Field collectors are always added via Setup → Collectors, so no
+  // hardcoded person names are seeded here.
   if (!Object.keys(AGENT_AREAS).length) {
     AGENT_AREAS = {
-      'uma@jsvcable.com': ['AREA 2'],
-      'muthumari@jsvcable.com': ['AREA 1'],
-      'office@jsvcable.com': null,
-      'online@jsvcable.com': null
+      'office@example.com': null,
+      'online@example.com': null
     };
     AGENT_NAMES = {
-      'uma@jsvcable.com': ['UMA'],
-      'muthumari@jsvcable.com': ['MUTHUMARI'],
-      'office@jsvcable.com': ['LOCAL', 'OFFICE'],
-      'online@jsvcable.com': ['ONLINE']
+      'office@example.com': ['LOCAL', 'OFFICE'],
+      'online@example.com': ['ONLINE']
     };
   }
 }
@@ -81,8 +79,8 @@ function getAgentAreas() {
   for (const [k, v] of Object.entries(AGENT_AREAS)) {
     if (email.startsWith(k.split('@')[0])) return v;
   }
-  // admin emails → all
-  if (email.includes('admin') || email.includes('jeyabal') || email.includes('stefi') || email.includes('muthuraj')) return null;
+  // Owner / admin accounts → all areas
+  if (email.includes('admin') || email.includes('muthuraj')) return null;
   // unknown collector with no employee record → no customers (safe)
   return [];
 }
@@ -785,12 +783,19 @@ async function loadDashboard(force) {
 function displayAgentName(d) {
   const s = (typeof d === 'string' ? d : (d && (d.collectedBy || d.employee || d.createdBy) || '')).toString();
   const lower = s.toLowerCase();
-  if (lower.includes('muthumari')) return 'MUTHUMARI';
-  if (lower.includes('uma@') || lower === 'uma' || /(^|[^a-z])uma([^a-z]|$)/.test(lower)) return 'UMA';
   if (lower.includes('office') || lower.includes('local')) return 'OFFICE';
   if (lower.includes('online')) return 'ONLINE';
-  if (lower.includes('stefi')) return 'STEFI';
-  if (lower.includes('jeyabal') || lower.includes('muthuraj')) return 'ADMIN';
+  // Match against employees loaded from Firestore (Setup → Collectors)
+  for (const email in AGENT_NAMES) {
+    const names = AGENT_NAMES[email] || [];
+    const emailPrefix = email.split('@')[0];
+    if (lower === email || lower.includes(emailPrefix) || names.some(n => lower.includes(String(n).toLowerCase()))) {
+      return names[0] || emailPrefix.toUpperCase();
+    }
+  }
+  if (currentUser && currentUser.email && lower === String(currentUser.email).toLowerCase()) {
+    return (currentUser.email.split('@')[0] || 'ME').toUpperCase();
+  }
   if (s && !s.includes('@') && s.length < 20) return s.toUpperCase();
   if (s.includes('@')) return s.split('@')[0].toUpperCase();
   return s || '-';

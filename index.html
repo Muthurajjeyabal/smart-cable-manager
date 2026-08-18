@@ -520,36 +520,12 @@
                       <th class="text-right py-2 font-medium" data-i18n="dashColMonth">This Month</th>
                     </tr>
                   </thead>
-                  <tbody class="divide-y divide-slate-100">
-                    <tr>
-                      <td class="py-2.5 font-medium text-slate-700">UMA<br><span class="text-[10px] text-slate-400 font-normal" id="agentUmaCnt">0 bills today</span></td>
-                      <td class="py-2.5 text-right font-bold text-blue-600" id="agentUmaToday">₹0</td>
-                      <td class="py-2.5 text-right font-bold text-slate-900" id="agentUma">₹0</td>
-                    </tr>
-                    <tr>
-                      <td class="py-2.5 font-medium text-slate-700">MUTHUMARI<br><span class="text-[10px] text-slate-400 font-normal" id="agentMuthuCnt">0 bills today</span></td>
-                      <td class="py-2.5 text-right font-bold text-emerald-600" id="agentMuthuToday">₹0</td>
-                      <td class="py-2.5 text-right font-bold text-slate-900" id="agentMuthu">₹0</td>
-                    </tr>
-                    <tr>
-                      <td class="py-2.5 font-medium text-slate-700">OFFICE<br><span class="text-[10px] text-slate-400 font-normal" id="agentOfficeCnt">0 bills today</span></td>
-                      <td class="py-2.5 text-right font-bold text-violet-600" id="agentOfficeToday">₹0</td>
-                      <td class="py-2.5 text-right font-bold text-slate-900" id="agentOffice">₹0</td>
-                    </tr>
-                    <tr>
-                      <td class="py-2.5 font-medium text-slate-700">ONLINE<br><span class="text-[10px] text-slate-400 font-normal" id="agentOnlineCnt">0 bills today</span></td>
-                      <td class="py-2.5 text-right font-bold text-amber-600" id="agentOnlineToday">₹0</td>
-                      <td class="py-2.5 text-right font-bold text-slate-900" id="agentOnline">₹0</td>
-                    </tr>
+                  <tbody class="divide-y divide-slate-100" id="agentRowsBody">
+                    <tr><td colspan="3" class="py-4 text-center text-slate-400 text-xs">Loading…</td></tr>
                   </tbody>
                 </table>
               </div>
               <div class="text-[10px] text-slate-400 mt-3 text-right hidden" id="agentOtherWrap">Other (month): <span id="agentOther">₹0</span></div>
-              <!-- hidden legacy for progress bars if any code refs -->
-              <div class="hidden">
-                <span id="agentUmaPct"></span><span id="agentMuthuPct"></span><span id="agentOfficePct"></span><span id="agentOnlinePct"></span>
-                <div id="agentUmaBar"></div><div id="agentMuthuBar"></div><div id="agentOfficeBar"></div><div id="agentOnlineBar"></div>
-              </div>
             </div>
           </div>
 
@@ -1209,7 +1185,7 @@
                 <button type="button" onclick="openReport('agentDay')" class="w-full soft-card px-3 py-3 text-left card-hover flex gap-3 items-center">
                   <span class="text-lg">👤</span>
                   <span class="min-w-0"><span class="block font-semibold text-sm" data-i18n="repCollection">Collection Report</span>
-                  <span class="block text-[11px] text-slate-500">UMA · Muthumari · Office · Online</span></span>
+                  <span class="block text-[11px] text-slate-500">Collector · Office · Online mode split</span></span>
                 </button>
               </div>
             </div>
@@ -1383,10 +1359,6 @@
                   <label class="text-[10px] text-slate-500">Agent</label>
                   <select id="agentRepWho" onchange="renderAgentDayReport()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white">
                     <option value="ALL">All</option>
-                    <option value="uma">UMA</option>
-                    <option value="muthumari">MUTHUMARI</option>
-                    <option value="office">OFFICE</option>
-                    <option value="online">ONLINE</option>
                   </select>
                 </div>
                 <div>
