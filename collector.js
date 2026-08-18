@@ -11,10 +11,26 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 
 let currentUser = null;
+let currentCompanyId = null;
 let allCustomers = [];
 let allCustomersRaw = [];
 let selectedCustomer = null;
 let placesMap = {};
+
+// Same tenant-scoping helper as the admin app — every collector's data read
+// is scoped to their own company only.
+function col(name) {
+  if (!currentCompanyId) throw new Error('No company context — please log in again');
+  return db.collection('companies').doc(currentCompanyId).collection(name);
+}
+
+async function resolveUserCompany(user) {
+  const emailKey = (user.email || '').toLowerCase().trim();
+  const doc = await db.collection('users').doc(emailKey).get();
+  if (!doc.exists) return null;
+  const d = doc.data();
+  return { companyId: d.companyId, role: String(d.role || 'collector').toLowerCase() };
+}
 
 // Area allotment — loaded from Firestore `employees` (Admin Masters)
 let AGENT_AREAS = {};   // email -> ['AREA 1'] or null for ALL
@@ -25,7 +41,7 @@ async function loadEmployeeMap() {
   AGENT_AREAS = {};
   AGENT_NAMES = {};
   try {
-    const snap = await db.collection('employees').get();
+    const snap = await col('employees').get();
     snap.forEach(doc => {
       const d = doc.data();
       const email = String(d.email || '').toLowerCase().trim();
@@ -102,6 +118,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
   auth.onAuthStateChanged(async user => {
     if (user) {
+      let info;
+      try { info = await resolveUserCompany(user); }
+      catch (e) { info = null; }
+      if (!info || !info.companyId) {
+        // No company mapping for this login — not set up by an admin yet.
+        await auth.signOut();
+        currentUser = null;
+        currentCompanyId = null;
+        document.getElementById('loginScreen').classList.remove('hidden');
+        document.getElementById('appScreen').classList.add('hidden');
+        const err = document.getElementById('loginError');
+        if (err) {
+          err.textContent = 'இந்த account எந்த company-க்கும் link ஆகவில்லை. Admin-கிட்ட கேளுங்கள்.';
+          err.classList.remove('hidden');
+        }
+        return;
+      }
+      currentCompanyId = info.companyId;
       await loadEmployeeMap();
       try { updateColOfflineUI(); flushCollectorOffline(); } catch(e) {}
       currentUser = user;
@@ -116,6 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
       goHome();
     } else {
       currentUser = null;
+      currentCompanyId = null;
       document.getElementById('loginScreen').classList.remove('hidden');
       document.getElementById('appScreen').classList.add('hidden');
     }
@@ -190,7 +225,7 @@ async function loadCustomers(force) {
     allCustomers = filterByAgentArea(allCustomersRaw);
     return;
   }
-  const snap = await db.collection('customers').get();
+  const snap = await col('customers').get();
   allCustomersRaw = [];
   snap.forEach(doc => {
     allCustomersRaw.push({ id: doc.id, ...doc.data() });
@@ -362,8 +397,8 @@ async function saveCollection() {
   try {
     if (!navigator.onLine) throw new Error('OFFLINE');
     data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-    await db.collection('collections').add(data);
-    await db.collection('customers').doc(selectedCustomer.id).update({
+    await col('collections').add(data);
+    await col('customers').doc(selectedCustomer.id).update({
       dueAmt: newDue,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
@@ -437,9 +472,9 @@ async function flushCollectorOffline() {
       if (op.type === 'collection') {
         const d = { ...op.data };
         d.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-        await db.collection('collections').add(d);
+        await col('collections').add(d);
         if (op.customerId) {
-          await db.collection('customers').doc(op.customerId).update({
+          await col('customers').doc(op.customerId).update({
             dueAmt: op.newDue,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
           });
@@ -482,7 +517,7 @@ async function viewLedger(id) {
   const content = document.getElementById('ledgerContent');
   content.innerHTML = '<div class="text-center py-6 text-slate-400">Loading...</div>';
   try {
-    const snap = await db.collection('collections').where('customerId', '==', id).get();
+    const snap = await col('collections').where('customerId', '==', id).get();
     const rows = [];
     snap.forEach(doc => rows.push(doc.data()));
     rows.sort((a,b) => (b.date||'').localeCompare(a.date||''));
@@ -515,10 +550,10 @@ async function loadColReport() {
   try {
     let snap;
     if (from && to) {
-      snap = await db.collection('collections').where('date', '>=', from).where('date', '<=', to).get();
+      snap = await col('collections').where('date', '>=', from).where('date', '<=', to).get();
     } else {
       const today = new Date().toISOString().split('T')[0]; // today only — no backdate
-      snap = await db.collection('collections').where('date', '==', today).get();
+      snap = await col('collections').where('date', '==', today).get();
     }
     const rows = [];
     snap.forEach(doc => {
@@ -728,7 +763,7 @@ async function loadDashboard(force) {
   const today = new Date().toISOString().split('T')[0];
 
   try {
-    const todaySnap = await db.collection('collections').where('date', '==', today).get();
+    const todaySnap = await col('collections').where('date', '==', today).get();
     let todayT = 0, todayN = 0;
     const paidTodayIds = new Set();
     const recent = [];

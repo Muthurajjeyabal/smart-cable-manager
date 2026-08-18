@@ -26,26 +26,88 @@ const db = firebase.firestore();
 
 // ==================== STATE ====================
 let currentUser = null;
+let currentCompanyId = null;   // multi-tenant scope — every data read/write goes through col()
+let currentUserRole = null;    // 'admin' | 'collector'
 let allCustomers = [];
 let selectedBillCustomer = null;
 let currentLedgerCustomerId = null;
 
-// Only these can use the Admin app (everyone else = collector app only).
-// Add more owner/admin emails here as needed.
-const ADMIN_EMAILS = [
-  'muthurajjeyabal@gmail.com',
-];
+// Returns a Firestore collection reference scoped to the logged-in admin's
+// own company. This is how every operator's data stays completely separate
+// from every other operator's data, even though they all share one Firebase
+// project.
+function col(name) {
+  if (!currentCompanyId) throw new Error('No company context — please log in again');
+  return db.collection('companies').doc(currentCompanyId).collection(name);
+}
 
-function isAdminUser(user) {
-  if (!user || !user.email) return false;
-  const email = user.email.toLowerCase();
-  if (ADMIN_EMAILS.some(a => email === a.toLowerCase())) return true;
-  // Anyone listed in Setup → Collectors with role "admin" also gets admin access.
-  const emp = (allEmployees || []).find(e => String(e.email || '').toLowerCase() === email);
-  if (emp && String(emp.role || '').toLowerCase() === 'admin') return true;
-  // Everyone else (including collectors added in Setup → Collectors) is
-  // routed to the Collector app only.
-  return false;
+// Looks up which company (if any) this email belongs to, and their role
+// within it. Returns null for a brand-new user who hasn't set up a company
+// yet (triggers the onboarding screen).
+async function resolveUserCompany(user) {
+  const emailKey = (user.email || '').toLowerCase().trim();
+  const doc = await db.collection('users').doc(emailKey).get();
+  if (!doc.exists) return null;
+  const d = doc.data();
+  return {
+    companyId: d.companyId,
+    role: String(d.role || 'collector').toLowerCase(),
+    companyName: d.companyName || ''
+  };
+}
+
+async function handleCreateCompany() {
+  const nameEl = document.getElementById('onboardCompanyName');
+  const errBox = document.getElementById('onboardError');
+  const btn = document.getElementById('onboardCreateBtn');
+  const name = (nameEl?.value || '').trim();
+  if (errBox) errBox.classList.add('hidden');
+  if (!name) {
+    if (errBox) { errBox.textContent = 'Company பெயர் போடுங்கள்'; errBox.classList.remove('hidden'); }
+    return;
+  }
+  const user = auth.currentUser;
+  if (!user) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
+  try {
+    const emailKey = (user.email || '').toLowerCase().trim();
+    const companyRef = db.collection('companies').doc();
+    await companyRef.set({
+      name,
+      ownerEmail: emailKey,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    await db.collection('users').doc(emailKey).set({
+      companyId: companyRef.id,
+      role: 'admin',
+      email: emailKey,
+      companyName: name,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    // re-run the login flow now that a company exists
+    await enterAdminApp({ companyId: companyRef.id, role: 'admin', companyName: name }, user);
+  } catch (e) {
+    if (errBox) { errBox.textContent = 'Error: ' + e.message; errBox.classList.remove('hidden'); }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Create My Company'; }
+  }
+}
+
+async function enterAdminApp(info, user) {
+  currentCompanyId = info.companyId;
+  currentUserRole = 'admin';
+  currentUser = user;
+  document.getElementById('companyOnboardingScreen')?.classList.add('hidden');
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('appScreen').classList.remove('hidden');
+  document.getElementById('userEmailDisplay').textContent = user.email;
+  try { await loadCompanyInfo(); } catch (e) {}
+  try { await loadWaTemplate(); } catch (e) {}
+  try { flushOfflineQueue(); } catch (e) {}
+  loadDashboard();
+  loadCustomers();
+  if (typeof loadEmployees === 'function') loadEmployees();
+  if (typeof loadPlacesMaster === 'function') loadPlacesMaster();
 }
 
 // ==================== INIT ====================
@@ -61,15 +123,25 @@ document.addEventListener('DOMContentLoaded', () => {
   if (billDateEl) billDateEl.value = today;
 
   auth.onAuthStateChanged(async user => {
-  try { await loadCompanyInfo(); } catch(e) {}
-    try { await loadWaTemplate(); } catch(e) {}
-    try { flushOfflineQueue(); } catch(e) {}
     if (user) {
-      if (!isAdminUser(user)) {
+      let info;
+      try { info = await resolveUserCompany(user); }
+      catch (e) { info = null; }
+
+      if (!info) {
+        // Brand-new login with no company yet → self-serve onboarding
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('appScreen').classList.add('hidden');
+        document.getElementById('companyOnboardingScreen')?.classList.remove('hidden');
+        return;
+      }
+      if (info.role !== 'admin') {
         await auth.signOut();
         currentUser = null;
+        currentCompanyId = null;
         document.getElementById('loginScreen').classList.remove('hidden');
         document.getElementById('appScreen').classList.add('hidden');
+        document.getElementById('companyOnboardingScreen')?.classList.add('hidden');
         const errBox = document.getElementById('loginError');
         if (errBox) {
           errBox.innerHTML = 'Collector login. Admin app அல்ல.<br><a class="underline text-blue-600" href="collector.html">Collector App திறக்க →</a>';
@@ -78,18 +150,13 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('Collectors must use Collector App', true);
         return;
       }
-      currentUser = user;
-      document.getElementById('loginScreen').classList.add('hidden');
-      document.getElementById('appScreen').classList.remove('hidden');
-      document.getElementById('userEmailDisplay').textContent = user.email;
-      loadDashboard();
-      loadCustomers();
-      if (typeof loadEmployees === 'function') loadEmployees();
-      if (typeof loadPlacesMaster === 'function') loadPlacesMaster();
+      await enterAdminApp(info, user);
     } else {
       currentUser = null;
+      currentCompanyId = null;
       document.getElementById('loginScreen').classList.remove('hidden');
       document.getElementById('appScreen').classList.add('hidden');
+      document.getElementById('companyOnboardingScreen')?.classList.add('hidden');
     }
   });
 
@@ -249,7 +316,7 @@ function toggleSidebar() {
 // ==================== CUSTOMERS ====================
 async function loadCustomers() {
   try {
-    const snap = await db.collection('customers').get();
+    const snap = await col('customers').get();
     allCustomers = [];
     snap.forEach(doc => {
       allCustomers.push({ id: doc.id, ...doc.data() });
@@ -439,10 +506,10 @@ async function handleSaveCustomer(e) {
       const newPlace = String(data.place || '').trim();
       const newStreet = String(data.street || '').trim();
       const transferred = (oldPlace !== newPlace || oldStreet !== newStreet);
-      await db.collection('customers').doc(editId).update(data);
+      await col('customers').doc(editId).update(data);
       if (transferred) {
         try {
-          await db.collection('transfers').add({
+          await col('transfers').add({
             customerId: editId,
             custId: data.custId || prev.custId || '',
             customerName: data.name || prev.name || '',
@@ -464,7 +531,7 @@ async function handleSaveCustomer(e) {
       const manualId = (document.getElementById('custCustId')?.value || '').trim();
       data.custId = manualId || ('C' + Date.now().toString().slice(-6));
       data.streetId = getStreetId(data.place, data.street);
-      const ref = await db.collection('customers').add(data);
+      const ref = await col('customers').add(data);
       savedId = ref.id;
       showToast('Customer added!');
     }
@@ -659,7 +726,7 @@ async function saveTransferModal() {
       scNo: scNo || '',
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
-    await db.collection('customers').doc(id).update(updates);
+    await col('customers').doc(id).update(updates);
     // box stock update if box changed
     if (boxNo && boxNo !== (c.boxNo || '')) {
       try {
@@ -675,7 +742,7 @@ async function saveTransferModal() {
       } catch (_) {}
     }
     try {
-      await db.collection('transfers').add({
+      await col('transfers').add({
         customerId: id,
         customerName: c.name || '',
         fromCustId: oldCustId,
@@ -800,7 +867,7 @@ async function savePackageModal() {
   const packageAmt = packageBase + addonAmt;
   if (!pkg) { showToast('Package select பண்ணுங்கள்', true); return; }
   try {
-    await db.collection('customers').doc(id).update({
+    await col('customers').doc(id).update({
       package: pkg,
       packageBase,
       packageAmt,
@@ -835,7 +902,7 @@ async function deleteCustomer(id) {
   if (!confirm('DELETE customer?\n\n' + label + '\n\n1/2 — Are you sure?')) return;
   if (!confirm('FINAL confirm.\n\n' + label + '\n\nLedger history will remain but customer will be removed from list.\n\n2/2 — Delete permanently?')) return;
   try {
-    await db.collection('customers').doc(id).delete();
+    await col('customers').doc(id).delete();
     allCustomers = allCustomers.filter(x => x.id !== id);
     renderCustomerTable(allCustomers);
     updateDashboardStats();
@@ -884,7 +951,7 @@ async function toggleDC(id, currentStatus) {
       updates.dcReason = firebase.firestore.FieldValue.delete();
       updates.rcDate = new Date().toISOString().slice(0, 10);
     }
-    await db.collection('customers').doc(id).update(updates);
+    await col('customers').doc(id).update(updates);
 
     if (returnBox && boxNo) {
       await upsertBoxStock(boxNo, {
@@ -898,7 +965,7 @@ async function toggleDC(id, currentStatus) {
     }
 
     // RC with no box - optional assign from stock later via Edit
-    await db.collection('statusLogs').add({
+    await col('statusLogs').add({
       customerId: id,
       customerName: c.name,
       fromStatus: currentStatus,
@@ -1062,7 +1129,7 @@ async function logActivity(customerId, action, detail, extra) {
       }
     }
     const cat = (extra && extra.category) || classifyActivityAction(action);
-    await db.collection('activityLogs').add({
+    await col('activityLogs').add({
       customerId: customerId || '',
       customerName: customerName || '',
       custId: custId || '',
@@ -1200,7 +1267,7 @@ async function viewLedger(id) {
   if (timeline) timeline.innerHTML = '<div class="p-6 text-center text-slate-400 text-sm">Loading...</div>';
 
   try {
-    const snap = await db.collection('collections').where('customerId', '==', id).get();
+    const snap = await col('collections').where('customerId', '==', id).get();
     const rows = [];
     snap.forEach(doc => rows.push({ id: doc.id, ...doc.data() }));
     rows.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
@@ -1279,7 +1346,7 @@ async function loadLedgerActivity(id, c) {
   try {
     // unified activityLogs
     try {
-      const a = await db.collection('activityLogs').where('customerId', '==', id).limit(100).get();
+      const a = await col('activityLogs').where('customerId', '==', id).limit(100).get();
       a.forEach(doc => {
         const d = doc.data();
         events.push({
@@ -1293,7 +1360,7 @@ async function loadLedgerActivity(id, c) {
     } catch (e) {}
     // statusLogs
     try {
-      const s = await db.collection('statusLogs').where('customerId', '==', id).limit(50).get();
+      const s = await col('statusLogs').where('customerId', '==', id).limit(50).get();
       s.forEach(doc => {
         const d = doc.data();
         events.push({
@@ -1307,7 +1374,7 @@ async function loadLedgerActivity(id, c) {
     } catch (e) {}
     // transfers
     try {
-      const t = await db.collection('transfers').where('customerId', '==', id).limit(50).get();
+      const t = await col('transfers').where('customerId', '==', id).limit(50).get();
       t.forEach(doc => {
         const d = doc.data();
         events.push({
@@ -1591,7 +1658,7 @@ function updateBillPayHint() {
 
 async function nextDailyBillNo(billDate) {
   // Format: YYYY-MM-DD-001 (resets every day)
-  const ref = db.collection('counters').doc('bills_' + billDate);
+  const ref = col('counters').doc('bills_' + billDate);
   const billNo = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     let n = 1;
@@ -1659,9 +1726,9 @@ async function handleSaveBill(e) {
 
   try {
     if (!navigator.onLine) throw new Error('OFFLINE');
-    await db.collection('collections').add(data);
+    await col('collections').add(data);
     if (c0) {
-      await db.collection('customers').doc(customerId).update({
+      await col('customers').doc(customerId).update({
         dueAmt: newDue,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
@@ -1742,13 +1809,13 @@ async function cancelCollection(colId, customerId, amount) {
   reason = (reason || 'Other').trim();
   if (!confirm('Confirm cancel ₹' + Number(amount || 0) + '?\\nReason: ' + reason)) return;
   try {
-    await db.collection('collections').doc(colId).update({
+    await col('collections').doc(colId).update({
       status: 'cancelled',
       cancelReason: reason,
       cancelledAt: firebase.firestore.FieldValue.serverTimestamp(),
       cancelledBy: (currentUser && currentUser.email) || ''
     });
-    const cRef = db.collection('customers').doc(customerId);
+    const cRef = col('customers').doc(customerId);
     const cSnap = await cRef.get();
     if (cSnap.exists) {
       const due = Number(cSnap.data().dueAmt || cSnap.data().due || 0);
@@ -1776,11 +1843,11 @@ async function loadCancelledBills() {
   try {
     let rows = [];
     try {
-      const snap = await db.collection('collections').where('status', '==', 'cancelled').get();
+      const snap = await col('collections').where('status', '==', 'cancelled').get();
       snap.forEach(function (doc) { rows.push({ id: doc.id, ...doc.data() }); });
     } catch (e1) {
       // fallback: scan recent collections
-      const snap = await db.collection('collections').limit(500).get();
+      const snap = await col('collections').limit(500).get();
       snap.forEach(function (doc) {
         const d = doc.data();
         if (String(d.status || '') === 'cancelled') rows.push({ id: doc.id, ...d });
@@ -1830,7 +1897,7 @@ async function loadDashboard() {
     const agentsMonth = { other: emptyBucket() };
     AGENT_LIST.forEach(a => { agentsToday[a.key] = emptyBucket(); agentsMonth[a.key] = emptyBucket(); });
 
-    const todaySnap = await db.collection('collections').where('date', '==', today).get();
+    const todaySnap = await col('collections').where('date', '==', today).get();
     let todayTotal = 0;
     todaySnap.forEach(doc => {
       const d = doc.data();
@@ -1844,7 +1911,7 @@ async function loadDashboard() {
     const st = document.getElementById('statTodayCol');
     if (st) st.textContent = '₹ ' + todayTotal.toLocaleString('en-IN');
 
-    const monthSnap = await db.collection('collections').where('date', '>=', monthStart).get();
+    const monthSnap = await col('collections').where('date', '>=', monthStart).get();
     let monthTotal = 0;
     monthSnap.forEach(doc => {
       const d = doc.data();
@@ -1979,7 +2046,7 @@ function ensureWaTemplates() {
 async function loadWaTemplate() {
   ensureWaTemplates();
   try {
-    const doc = await db.collection('settings').doc('waTemplates').get();
+    const doc = await col('settings').doc('waTemplates').get();
     if (doc.exists) {
       const d = doc.data();
       if (d.templates && typeof d.templates === 'object') {
@@ -1988,7 +2055,7 @@ async function loadWaTemplate() {
       if (d.defaultId) waDefaultTplId = d.defaultId;
       // migrate old single template
     } else {
-      const old = await db.collection('settings').doc('waTemplate').get();
+      const old = await col('settings').doc('waTemplate').get();
       if (old.exists && old.data().text) {
         waTemplates.due = { name: 'Due Reminder', text: old.data().text };
       }
@@ -2029,7 +2096,7 @@ function onWaTplSelect() {
 }
 
 async function persistWaTemplates() {
-  await db.collection('settings').doc('waTemplates').set({
+  await col('settings').doc('waTemplates').set({
     templates: waTemplates,
     defaultId: waDefaultTplId,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -2424,7 +2491,7 @@ async function bulkAddAddon() {
         addons.push({ name, amount });
         const addonAmt = addons.reduce((s, a) => s + Number(a.amount || 0), 0);
         const base = c.packageBase != null ? Number(c.packageBase) : Math.max(0, Number(c.packageAmt || 0) - Number(c.addonAmt || 0));
-        batch.update(db.collection('customers').doc(c.id), {
+        batch.update(col('customers').doc(c.id), {
           addons,
           addonAmt,
           packageBase: base,
@@ -2462,7 +2529,7 @@ async function generateMonthDue() {
   const monthLabel = new Date().toLocaleString('en-IN', { month: 'long', year: 'numeric' });
 
   try {
-    const lockRef = db.collection('settings').doc('monthBill');
+    const lockRef = col('settings').doc('monthBill');
     const lockSnap = await lockRef.get();
     const last = lockSnap.exists ? (lockSnap.data().lastGeneratedYM || '') : '';
     if (last === ym) {
@@ -2480,7 +2547,7 @@ async function generateMonthDue() {
     if (status) { status.classList.remove('hidden'); status.textContent = 'Loading customers...'; }
 
     // Fresh read
-    const snap = await db.collection('customers').get();
+    const snap = await col('customers').get();
     const updates = [];
     snap.forEach(doc => {
       const d = doc.data();
@@ -2509,7 +2576,7 @@ async function generateMonthDue() {
     for (let i = 0; i < updates.length; i += BATCH_SIZE) {
       const batch = db.batch();
       updates.slice(i, i + BATCH_SIZE).forEach(u => {
-        batch.update(db.collection('customers').doc(u.id), {
+        batch.update(col('customers').doc(u.id), {
           dueAmt: u.newDue,
           updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
@@ -2549,7 +2616,7 @@ async function refreshMonthBillLockUI() {
   try {
     const ym = new Date().toISOString().slice(0, 7);
     const monthLabel = new Date().toLocaleString('en-IN', { month: 'long', year: 'numeric' });
-    const snap = await db.collection('settings').doc('monthBill').get();
+    const snap = await col('settings').doc('monthBill').get();
     if (snap.exists && snap.data().lastGeneratedYM === ym) {
       btn.disabled = true;
       btn.textContent = 'Already Generated · ' + monthLabel;
@@ -2566,9 +2633,9 @@ let allBoxes = [];
 let boxListFilter = 'available';
 
 async function upsertBoxStock(boxNo, data) {
-  const q = await db.collection('boxes').where('boxNo', '==', boxNo).limit(1).get();
+  const q = await col('boxes').where('boxNo', '==', boxNo).limit(1).get();
   if (q.empty) {
-    await db.collection('boxes').add({
+    await col('boxes').add({
       boxNo,
       status: data.status || 'available',
       customerId: data.customerId || null,
@@ -2589,7 +2656,7 @@ async function upsertBoxStock(boxNo, data) {
 
 async function loadBoxes() {
   try {
-    const snap = await db.collection('boxes').get();
+    const snap = await col('boxes').get();
     allBoxes = [];
     snap.forEach(doc => allBoxes.push({ id: doc.id, ...doc.data() }));
     allBoxes.sort((a, b) => (a.boxNo || '').localeCompare(b.boxNo || '', undefined, { numeric: true }));
@@ -2723,9 +2790,9 @@ async function syncBoxesFromCustomers() {
           updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         };
         if (existing.has(key)) {
-          batch.update(db.collection('boxes').doc(existing.get(key)), data);
+          batch.update(col('boxes').doc(existing.get(key)), data);
         } else {
-          const ref = db.collection('boxes').doc();
+          const ref = col('boxes').doc();
           data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
           data.source = 'customer-sync';
           batch.set(ref, data);
@@ -2815,10 +2882,10 @@ async function importMsoBoxList() {
       };
       if (isAssigned) assigned++; else stock++;
       if (existing.has(key)) {
-        batch.update(db.collection('boxes').doc(existing.get(key)), data);
+        batch.update(col('boxes').doc(existing.get(key)), data);
         updated++;
       } else {
-        const ref = db.collection('boxes').doc();
+        const ref = col('boxes').doc();
         data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
         batch.set(ref, data);
         existing.set(key, ref.id);
@@ -2843,7 +2910,7 @@ let streetMasterFilter = 'ALL';
 
 async function loadStreetMaster() {
   try {
-    const snap = await db.collection('streets').get();
+    const snap = await col('streets').get();
     streetMasterCache = [];
     snap.forEach(doc => streetMasterCache.push({ id: doc.id, ...doc.data() }));
     streetMasterCache.sort((a, b) => {
@@ -2922,11 +2989,11 @@ async function saveStreetMaster() {
   try {
     const data = { place, street, streetId, updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
     if (editId) {
-      await db.collection('streets').doc(editId).update(data);
+      await col('streets').doc(editId).update(data);
       showToast('Street updated');
     } else {
       data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection('streets').add(data);
+      await col('streets').add(data);
       showToast('Street added');
     }
     clearStreetForm();
@@ -2939,7 +3006,7 @@ async function saveStreetMaster() {
 async function deleteStreetMaster(id) {
   if (!confirm('Delete this street?')) return;
   try {
-    await db.collection('streets').doc(id).delete();
+    await col('streets').doc(id).delete();
     showToast('Deleted');
     await loadStreetMaster();
   } catch (e) {
@@ -2956,7 +3023,7 @@ async function seedStreetsFromCode() {
     for (let i = 0; i < streetMasterCache.length; i += 400) {
       const batch = db.batch();
       streetMasterCache.slice(i, i + 400).forEach(s => {
-        if (s.id) { batch.delete(db.collection('streets').doc(s.id)); del++; }
+        if (s.id) { batch.delete(col('streets').doc(s.id)); del++; }
       });
       await batch.commit();
     }
@@ -2964,7 +3031,7 @@ async function seedStreetsFromCode() {
     for (let i = 0; i < STREET_MASTER.length; i += 400) {
       const batch = db.batch();
       STREET_MASTER.slice(i, i + 400).forEach(s => {
-        const ref = db.collection('streets').doc();
+        const ref = col('streets').doc();
         batch.set(ref, {
           place: s.place,
           street: s.street,
@@ -3016,7 +3083,7 @@ async function loadPlacesMaster() {
   const list = document.getElementById('placeMasterList');
   if (list) list.innerHTML = '<li class="px-3 py-3 text-slate-400 text-center">Loading...</li>';
   try {
-    const snap = await db.collection('places').get();
+    const snap = await col('places').get();
     placesMasterCache = [];
     snap.forEach(doc => placesMasterCache.push({ id: doc.id, ...doc.data() }));
     placesMasterCache.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -3051,7 +3118,7 @@ async function savePlaceMaster() {
     return;
   }
   try {
-    await db.collection('places').add({ name, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    await col('places').add({ name, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
     if (nameEl) nameEl.value = '';
     showToast('Area added');
     await loadPlacesMaster();
@@ -3063,7 +3130,7 @@ async function savePlaceMaster() {
 async function deletePlaceMaster(id) {
   if (!confirm('இந்த area-ஐ delete பண்ணவா? (இந்த area-வுல இருக்கும் customers/streets பாதிக்கப்படாது, ஆனா dropdown-ல் இனி தெரியாது)')) return;
   try {
-    await db.collection('places').doc(id).delete();
+    await col('places').doc(id).delete();
     showToast('Deleted');
     await loadPlacesMaster();
   } catch (e) {
@@ -3111,7 +3178,7 @@ let packageMasterCache = [];
 let msoMasterCache = [];
 
 async function loadPackageMaster() {
-  const snap = await db.collection('packages').orderBy('amount').get().catch(() => db.collection('packages').get());
+  const snap = await col('packages').orderBy('amount').get().catch(() => col('packages').get());
   packageMasterCache = [];
   (snap.forEach ? snap : { forEach: () => {} });
   snap.forEach(doc => packageMasterCache.push({ id: doc.id, ...doc.data() }));
@@ -3143,8 +3210,8 @@ async function savePackageMaster() {
   const amount = Number(document.getElementById('mstPkgAmt').value||0);
   const editId = document.getElementById('editPkgDocId').value;
   if (!name || !amount) { showToast('Name + Amount', true); return; }
-  if (editId) await db.collection('packages').doc(editId).update({ name, amount });
-  else await db.collection('packages').add({ name, amount, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+  if (editId) await col('packages').doc(editId).update({ name, amount });
+  else await col('packages').add({ name, amount, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
   document.getElementById('editPkgDocId').value = '';
   document.getElementById('mstPkgName').value = '';
   document.getElementById('mstPkgAmt').value = '';
@@ -3154,7 +3221,7 @@ async function savePackageMaster() {
 
 async function deletePackageMaster(id) {
   if (!confirm('Delete package?')) return;
-  await db.collection('packages').doc(id).delete();
+  await col('packages').doc(id).delete();
   await loadPackageMaster();
 }
 
@@ -3166,7 +3233,7 @@ async function seedPackages() {
   for (const a of amts) {
     const name = 'PLAN ' + a;
     if (have.has(name)) continue;
-    await db.collection('packages').add({ name, amount: a });
+    await col('packages').add({ name, amount: a });
   }
   showToast('Packages imported');
   await loadPackageMaster();
@@ -3182,7 +3249,7 @@ function refreshCustomerPackageDropdown() {
 }
 
 async function loadMsoMaster() {
-  const snap = await db.collection('msos').get();
+  const snap = await col('msos').get();
   msoMasterCache = [];
   snap.forEach(doc => msoMasterCache.push({ id: doc.id, ...doc.data() }));
   msoMasterCache.sort((a,b) => (a.name||'').localeCompare(b.name||''));
@@ -3210,8 +3277,8 @@ async function saveMsoMaster() {
   const name = (document.getElementById('mstMsoName').value||'').trim();
   const editId = document.getElementById('editMsoDocId').value;
   if (!name) { showToast('MSO name', true); return; }
-  if (editId) await db.collection('msos').doc(editId).update({ name });
-  else await db.collection('msos').add({ name });
+  if (editId) await col('msos').doc(editId).update({ name });
+  else await col('msos').add({ name });
   document.getElementById('editMsoDocId').value = '';
   document.getElementById('mstMsoName').value = '';
   showToast('MSO saved');
@@ -3220,7 +3287,7 @@ async function saveMsoMaster() {
 
 async function deleteMsoMaster(id) {
   if (!confirm('Delete MSO?')) return;
-  await db.collection('msos').doc(id).delete();
+  await col('msos').doc(id).delete();
   await loadMsoMaster();
 }
 
@@ -3266,7 +3333,7 @@ function setCompanyEditMode(on) {
 
 async function loadCompanyInfo() {
   try {
-    const doc = await db.collection('settings').doc('company').get();
+    const doc = await col('settings').doc('company').get();
     if (doc.exists) {
       const d = doc.data();
       companyInfo = {
@@ -3309,7 +3376,7 @@ async function saveCompanyInfo() {
   };
   companyInfo.phone2 = String(companyInfo.phone2).trim();
   companyInfo.gpay = String(companyInfo.gpay).trim();
-  await db.collection('settings').doc('company').set({
+  await col('settings').doc('company').set({
     ...companyInfo,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   }, { merge: true });
@@ -3327,7 +3394,7 @@ async function fixGpayLocalAgents() {
   if (!confirm('GPAY → ONLINE · LOCAL → Office\n\nஏற்கனவே உள்ள collections update செய்யவா?\n(Dashboard Office/Online amount சரியாகும்)')) return;
   try {
     showToast('Updating agents...');
-    const snap = await db.collection('collections').get();
+    const snap = await col('collections').get();
     let gpay = 0, local = 0;
     const updates = [];
     snap.forEach(doc => {
@@ -3363,7 +3430,7 @@ async function fixGpayLocalAgents() {
         if (u.mode) payload.mode = u.mode;
         if (u.createdBy) payload.createdBy = u.createdBy;
         if (u.employee) payload.employee = u.employee;
-        batch.update(db.collection('collections').doc(u.id), payload);
+        batch.update(col('collections').doc(u.id), payload);
       });
       await batch.commit();
     }
@@ -3402,7 +3469,7 @@ async function importCollectionsFromJson(fileName, label) {
     // existing collections key: custDocId|billNo|date
     showToast('Checking existing bills...');
     const existingKeys = new Set();
-    const colSnap = await db.collection('collections').get();
+    const colSnap = await col('collections').get();
     colSnap.forEach(doc => {
       const d = doc.data();
       const k = (d.customerId || '') + '|' + String(d.billNo || '') + '|' + (d.date || d.billDate || '');
@@ -3434,7 +3501,7 @@ async function importCollectionsFromJson(fileName, label) {
         }
         if (!cust) { noMatch++; continue; }
 
-        const ref = db.collection('collections').doc();
+        const ref = col('collections').doc();
         const agent = (r.collected || r.employee || '').toUpperCase().trim();
         // Map Cable Soft COLLECTED → our agents
         // GPAY → ONLINE, LOCAL → OFFICE
@@ -3487,7 +3554,7 @@ async function importCollectionsFromJson(fileName, label) {
     for (let i = 0; i < paidArr.length; i += 400) {
       const batch = db.batch();
       paidArr.slice(i, i + 400).forEach(id => {
-        batch.update(db.collection('customers').doc(id), {
+        batch.update(col('customers').doc(id), {
           dueAmt: 0,
           updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
@@ -3586,10 +3653,10 @@ async function importDcList() {
           if (r.street) up.street = r.street;
           if (r.reason) up.dcReason = r.reason;
           if (r.signal) up.signal = r.signal;
-          batch.update(db.collection('customers').doc(cust.id), up);
+          batch.update(col('customers').doc(cust.id), up);
           updated++;
         } else {
-          const ref = db.collection('customers').doc();
+          const ref = col('customers').doc();
           batch.set(ref, {
             custId: cid, name: r.name || '', mobile: mobile, doorNo: r.doorNo || '',
             place: r.place || '', street: r.street || '', boxNo: box, scNo: r.sc || '', smartCard: r.sc || '',
@@ -3625,7 +3692,7 @@ async function loadEmployees() {
     { name: 'Online', email: 'online@example.com', area: 'ALL', role: 'online' }
   ];
   try {
-    const snap = await db.collection('employees').get();
+    const snap = await col('employees').get();
     allEmployees = [];
     snap.forEach(doc => allEmployees.push({ id: doc.id, ...doc.data() }));
     allEmployees.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -3634,7 +3701,7 @@ async function loadEmployees() {
       // seed once — no recursive hang
       for (const d of defaults) {
         try {
-          await db.collection('employees').add({
+          await col('employees').add({
             ...d,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
           });
@@ -3643,7 +3710,7 @@ async function loadEmployees() {
         }
       }
       try {
-        const snap2 = await db.collection('employees').get();
+        const snap2 = await col('employees').get();
         allEmployees = [];
         snap2.forEach(doc => allEmployees.push({ id: doc.id, ...doc.data() }));
       } catch (e2) {}
@@ -3756,12 +3823,25 @@ async function saveEmployee() {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
     if (id) {
-      await db.collection('employees').doc(id).update(data);
+      await col('employees').doc(id).update(data);
       showToast('Collector updated');
     } else {
       data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection('employees').add(data);
+      await col('employees').add(data);
       showToast('Collector created · Login ready');
+    }
+    // Map this login email to the current company + role, so they land in
+    // the right company's data when they sign in (admin app or collector app).
+    try {
+      await db.collection('users').doc(email).set({
+        companyId: currentCompanyId,
+        role: role === 'admin' ? 'admin' : 'collector',
+        email,
+        name,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    } catch (ue) {
+      console.error('users map save failed', ue);
     }
     clearEmpForm();
     await loadEmployees();
@@ -3775,7 +3855,7 @@ async function deleteEmployee(id) {
   if (String(id).startsWith('local_')) { showToast('Local only — Firestore-ல் save முதலில்', true); return; }
   if (!confirm('Delete this employee mapping?')) return;
   try {
-    await db.collection('employees').doc(id).delete();
+    await col('employees').doc(id).delete();
     showToast('Deleted');
     await loadEmployees();
   } catch (e) {
@@ -3911,7 +3991,7 @@ async function renderAgentDayReport() {
       if (s.includes('AREA 2')) return 'AREA 2';
       return s;
     }
-    const snap = await db.collection('collections').where('date', '>=', from).where('date', '<=', to).get();
+    const snap = await col('collections').where('date', '>=', from).where('date', '<=', to).get();
     const rows = [];
     // boxNo → customer for fallback MSO
     const byBox = new Map();
@@ -4156,32 +4236,32 @@ async function runFullBackup() {
     await loadCustomers();
     let boxes = [];
     try {
-      const bs = await db.collection('boxes').get();
+      const bs = await col('boxes').get();
       bs.forEach(d => boxes.push({ id: d.id, ...d.data() }));
     } catch (e) {}
     let collections = [];
     try {
-      const cs = await db.collection('collections').get();
+      const cs = await col('collections').get();
       cs.forEach(d => collections.push({ id: d.id, ...d.data() }));
     } catch (e) {}
     let streets = [];
     try {
-      const ss = await db.collection('streets').get();
+      const ss = await col('streets').get();
       ss.forEach(d => streets.push({ id: d.id, ...d.data() }));
     } catch (e) {}
     let employees = [];
     try {
-      const es = await db.collection('employees').get();
+      const es = await col('employees').get();
       es.forEach(d => employees.push({ id: d.id, ...d.data() }));
     } catch (e) {}
     let company = {};
     try {
-      const cd = await db.collection('settings').doc('company').get();
+      const cd = await col('settings').doc('company').get();
       if (cd.exists) company = cd.data();
     } catch (e) {}
     let monthBill = {};
     try {
-      const md = await db.collection('settings').doc('monthBill').get();
+      const md = await col('settings').doc('monthBill').get();
       if (md.exists) monthBill = md.data();
     } catch (e) {}
 
@@ -4328,7 +4408,7 @@ function setReportDatePreset(preset) {
 }
 
 async function fetchCollectionsInRange(from, to) {
-  const snap = await db.collection('collections').where('date', '>=', from).where('date', '<=', to).get();
+  const snap = await col('collections').where('date', '>=', from).where('date', '<=', to).get();
   const rows = [];
   snap.forEach(doc => {
     const d = doc.data();
@@ -4656,9 +4736,9 @@ async function renderActivityReport() {
     try {
       let snap;
       try {
-        snap = await db.collection('activityLogs').orderBy('createdAt', 'desc').limit(200).get();
+        snap = await col('activityLogs').orderBy('createdAt', 'desc').limit(200).get();
       } catch (e1) {
-        snap = await db.collection('activityLogs').limit(200).get();
+        snap = await col('activityLogs').limit(200).get();
       }
       snap.forEach(doc => {
         const d = doc.data();
@@ -4711,7 +4791,7 @@ async function renderActivityReport() {
 
     // 3) Transfers collection
     try {
-      const t = await db.collection('transfers').limit(50).get();
+      const t = await col('transfers').limit(50).get();
       t.forEach(doc => {
         const d = doc.data();
         pushEv({
@@ -5058,7 +5138,7 @@ async function renderTrendReport() {
       console.warn('trend fetch', e1);
       // fallback: load all collections limited client filter
       try {
-        const snap = await db.collection('collections').limit(2000).get();
+        const snap = await col('collections').limit(2000).get();
         snap.forEach(function (doc) {
           const d = doc.data();
           if (d.status === 'cancelled') return;
@@ -5265,12 +5345,12 @@ async function renderTransferReport() {
     let snap;
     try {
       if (from && to) {
-        snap = await db.collection('transfers').where('date', '>=', from).where('date', '<=', to).get();
+        snap = await col('transfers').where('date', '>=', from).where('date', '<=', to).get();
       } else {
-        snap = await db.collection('transfers').orderBy('date', 'desc').limit(500).get();
+        snap = await col('transfers').orderBy('date', 'desc').limit(500).get();
       }
     } catch (e1) {
-      snap = await db.collection('transfers').limit(500).get();
+      snap = await col('transfers').limit(500).get();
     }
     let rows = [];
     snap.forEach(function (doc) { rows.push({ id: doc.id, ...doc.data() }); });
@@ -5927,15 +6007,15 @@ async function flushOfflineQueue() {
   for (const op of q) {
     try {
       if (op.type === 'collection') {
-        await db.collection('collections').add(op.data);
+        await col('collections').add(op.data);
         if (op.customerId != null) {
-          await db.collection('customers').doc(op.customerId).update({
+          await col('customers').doc(op.customerId).update({
             dueAmt: op.newDue,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
           });
         }
       } else if (op.type === 'expense') {
-        await db.collection('expenses').add(op.data);
+        await col('expenses').add(op.data);
       }
     } catch (e) {
       remain.push(op);
@@ -5983,7 +6063,7 @@ async function saveExpense() {
   };
   try {
     if (!navigator.onLine) throw new Error('OFFLINE');
-    await db.collection('expenses').add(data);
+    await col('expenses').add(data);
     showToast('Expense saved · ₹' + amount);
   } catch (e) {
     const plain = { ...data, createdAt: new Date().toISOString() };
@@ -6004,7 +6084,7 @@ async function loadExpenses() {
   const today = new Date().toISOString().slice(0, 10);
   const monthStart = today.slice(0, 7) + '-01';
   try {
-    const snap = await db.collection('expenses').where('date', '>=', monthStart).get();
+    const snap = await col('expenses').where('date', '>=', monthStart).get();
     const rows = [];
     snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
     rows.sort((a, b) => String(b.date).localeCompare(String(a.date)));
@@ -6035,7 +6115,7 @@ async function loadExpenses() {
 async function editExpense(id) {
   const today = new Date().toISOString().slice(0, 10);
   try {
-    const snap = await db.collection('expenses').doc(id).get();
+    const snap = await col('expenses').doc(id).get();
     if (!snap.exists) { showToast('Not found', true); return; }
     const r = snap.data();
     if (r.date !== today) {
@@ -6048,7 +6128,7 @@ async function editExpense(id) {
     if (!amount || amount <= 0) { showToast('Invalid amount', true); return; }
     const note = prompt('Note', r.note || '') ;
     if (note === null) return;
-    await db.collection('expenses').doc(id).update({
+    await col('expenses').doc(id).update({
       amount,
       note: String(note).trim(),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -6063,14 +6143,14 @@ async function editExpense(id) {
 async function deleteExpense(id) {
   const today = new Date().toISOString().slice(0, 10);
   try {
-    const snap = await db.collection('expenses').doc(id).get();
+    const snap = await col('expenses').doc(id).get();
     if (!snap.exists) { showToast('Not found', true); return; }
     if (snap.data().date !== today) {
       showToast('இன்றைய expense மட்டும் delete செய்யலாம்', true);
       return;
     }
     if (!confirm('Delete this expense?')) return;
-    await db.collection('expenses').doc(id).delete();
+    await col('expenses').doc(id).delete();
     showToast('Deleted');
     loadExpenses();
   } catch (e) {
