@@ -1,0 +1,2406 @@
+<!DOCTYPE html>
+<html lang="ta">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Smart Cable Manager</title>
+  <script>
+    (function () {
+      try {
+        var lang = localStorage.getItem('jsv_lang') || 'en';
+        var theme = localStorage.getItem('jsv_theme') || 'light';
+        var ts = localStorage.getItem('jsv_text_size') || 'normal';
+        document.documentElement.lang = lang;
+        if (theme === 'dark') document.documentElement.classList.add('dark');
+        else document.documentElement.classList.remove('dark');
+        document.documentElement.classList.remove('text-lg-mode','text-xl-mode','text-xxl-mode');
+        if (ts === 'large') document.documentElement.classList.add('text-lg-mode');
+        else if (ts === 'xlarge') document.documentElement.classList.add('text-xl-mode');
+        else if (ts === 'xxlarge') document.documentElement.classList.add('text-xxl-mode');
+      } catch (e) {}
+    })();
+  </script>
+
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: '#0f172a',
+            accent: '#3b82f6',
+            success: '#10b981',
+            danger: '#ef4444',
+            warning: '#f59e0b'
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Firebase SDK (Compat for easy use) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+  <style>
+    * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+    html.dark body { background: #0b1220; color: #e2e8f0; }
+    html.dark .bg-white { background-color: #111827 !important; }
+    html.dark .bg-slate-50, html.dark .bg-slate-100 { background-color: #0f172a !important; }
+    html.dark .soft-card { background-color: #111827 !important; border-color: #1e293b !important; }
+    html.dark .text-slate-800, html.dark .text-slate-900 { color: #f1f5f9 !important; }
+    html.dark .text-slate-700 { color: #e2e8f0 !important; }
+    html.dark .text-slate-600 { color: #cbd5e1 !important; }
+    html.dark .text-slate-500, html.dark .text-slate-400 { color: #94a3b8 !important; }
+    html.dark .border, html.dark .border-slate-100, html.dark .border-slate-200 { border-color: #1e293b !important; }
+    html.dark input, html.dark select, html.dark textarea {
+      background-color: #0f172a !important; color: #e2e8f0 !important; border-color: #334155 !important;
+    }
+    html.dark #topBar, html.dark header, html.dark .top-bar {
+      background-color: #0f172a !important; border-color: #1e293b !important;
+    }
+    html.dark #sidebar { background-color: #020617 !important; }
+
+    /* Senior / large text modes — scale whole UI without breaking layout */
+    html.text-lg-mode { font-size: 112.5%; }
+    html.text-xl-mode { font-size: 125%; }
+    html.text-xxl-mode { font-size: 137.5%; }
+    html.text-lg-mode .text-xs, html.text-xl-mode .text-xs, html.text-xxl-mode .text-xs { font-size: 0.8rem !important; }
+    html.text-lg-mode .text-\[10px\], html.text-xl-mode .text-\[10px\], html.text-xxl-mode .text-\[10px\],
+    html.text-lg-mode .text-\[11px\], html.text-xl-mode .text-\[11px\], html.text-xxl-mode .text-\[11px\] {
+      font-size: 0.75rem !important;
+    }
+
+    .settings-acc-btn { background: transparent; }
+    .settings-acc.open .settings-acc-chev { transform: rotate(180deg); }
+    .settings-acc-chev { transition: transform .15s; display:inline-block; }
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+      background: #f8fafc;
+      color: #0f172a;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    .sidebar-item {
+      color: #94a3b8;
+      border-radius: 0.5rem;
+      transition: background .15s, color .15s;
+    }
+    .sidebar-item:hover { background: rgba(255,255,255,.06); color: #e2e8f0; }
+    .sidebar-item.active {
+      background: rgba(99,102,241,.15);
+      color: #fff;
+      font-weight: 600;
+    }
+    .nav-section {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #64748b;
+      padding: 1rem 0.75rem 0.35rem;
+    }
+    .card-hover { transition: transform .15s ease, box-shadow .15s ease, border-color .15s; }
+    .card-hover:hover { transform: translateY(-1px); box-shadow: 0 8px 24px -8px rgba(15,23,42,.12); border-color: #e2e8f0; }
+    .card-hover:active { transform: scale(0.98); }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+    .fade-in { animation: fadeUp .35s ease both; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .soft-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 1rem;
+      box-shadow: 0 1px 2px rgba(15,23,42,.04);
+    }
+    .progress-track {
+      height: 6px;
+      background: #f1f5f9;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width .6s cubic-bezier(.22,1,.36,1);
+    }
+  
+    #splashScreen {
+      position: fixed; inset: 0; z-index: 9999;
+      background: #000;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      transition: opacity .5s ease, visibility .5s ease;
+    }
+    #splashScreen.hide { opacity: 0; visibility: hidden; pointer-events: none; }
+    #splashScreen img {
+      width: min(72vw, 280px);
+      height: auto;
+      animation: logoIn .7s cubic-bezier(.22,1,.36,1) both;
+    }
+    #splashScreen .splash-sub {
+      margin-top: 1.25rem;
+      color: #3b82f6;
+      font-size: 12px;
+      letter-spacing: .2em;
+      font-weight: 600;
+      opacity: 0;
+      animation: logoIn .6s .25s ease both;
+    }
+    @keyframes logoIn {
+      from { opacity: 0; transform: scale(.88) translateY(8px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+  
+    @media print {
+      body * { visibility: hidden !important; }
+      #colRepPrint, #colRepPrint *,
+      #printRoot, #printRoot * { visibility: visible !important; }
+      #colRepPrint, #printRoot {
+        position: absolute; left: 0; top: 0; width: 100%;
+        border: none !important; box-shadow: none !important;
+        padding: 8px !important; margin: 0 !important;
+        background: #fff !important;
+      }
+      .no-print { display: none !important; }
+      #splashScreen, #sidebar, #sidebarOverlay, header, #loginScreen { display: none !important; }
+      @page { size: A4; margin: 10mm 12mm; }
+      table { width: 100%; border-collapse: collapse; font-size: 10px; }
+      th, td { border-bottom: 1px solid #e2e8f0; padding: 3px 4px; text-align: left; }
+    }
+    .col-street {
+      margin-bottom: 4px;
+    }
+    .col-street table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10px;
+      line-height: 1.25;
+    }
+    .col-street td, .col-street th {
+      border-bottom: 1px solid #e2e8f0;
+      padding: 2px 4px;
+      text-align: left;
+    }
+    .col-street th { font-size: 9px; color: #64748b; font-weight: 600; }
+    .col-street .amt { text-align: right; font-weight: 600; white-space: nowrap; }
+    .col-rep-head { text-align: center; margin-bottom: 8px; }
+    .col-rep-head h2 { font-size: 14px; font-weight: 700; margin: 0; }
+    .col-rep-head p { font-size: 10px; color: #64748b; margin: 2px 0 0; }
+
+    .col-street-title {
+      color: #b91c1c;
+      border-bottom: 1.5px solid #b91c1c;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 0;
+      margin: 6px 0 2px;
+      display: flex;
+      justify-content: space-between;
+    }
+    table.col-3col {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9px;
+      line-height: 1.15;
+      table-layout: fixed;
+    }
+    table.col-3col td {
+      border-bottom: 0.5px solid #cbd5e1;
+      padding: 1px 2px;
+      vertical-align: middle;
+    }
+    table.col-3col .c3-no { width: 5%; font-weight: 700; }
+    table.col-3col .c3-amt { width: 7%; text-align: right; font-weight: 600; }
+    table.col-3col .c3-name { width: 21%; overflow: hidden; white-space: nowrap; }
+    .col-rep-foot { margin-top: 8px; font-size: 9px; text-align: center; color: #64748b; }
+    .col-rep-head h2 { font-size: 12px !important; }
+    .col-rep-head p { font-size: 9px !important; margin: 1px 0 !important; }
+    @media print {
+      table.col-3col { font-size: 8.5px !important; }
+      table.col-3col td { padding: 0 1px !important; line-height: 1.12 !important; }
+      .col-street { margin-bottom: 2px !important; }
+      .col-street-title { font-size: 10px !important; margin: 4px 0 1px !important; padding: 1px 0 !important; }
+      #colRepPrint { padding: 0 !important; }
+      @page { size: A4; margin: 8mm 8mm; }
+    }
+
+  
+    .receipt-sheet {
+      width: 80mm;
+      max-width: 100%;
+      margin: 0 auto;
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+      color: #000;
+      padding: 8px;
+    }
+    @media print {
+      .receipt-only, .receipt-only * { visibility: visible !important; }
+      body.printing-receipt * { visibility: hidden !important; }
+      body.printing-receipt .receipt-only, body.printing-receipt .receipt-only * { visibility: visible !important; }
+      body.printing-receipt .receipt-only {
+        position: absolute; left: 0; top: 0; width: 80mm;
+      }
+    }
+  
+    body.printing-colrep * { visibility: hidden !important; }
+    body.printing-colrep #printRoot, body.printing-colrep #printRoot * { visibility: visible !important; }
+    body.printing-colrep #printRoot {
+      position: absolute !important; left: 0 !important; top: 0 !important;
+      width: 100% !important; height: auto !important;
+      background: #fff !important; z-index: 99999 !important;
+      padding: 4mm !important; margin: 0 !important;
+    }
+    body.printing-colrep #printRoot table.col-3col { font-size: 8px !important; }
+    body.printing-colrep #printRoot table.col-3col td { padding: 0 1px !important; line-height: 1.1 !important; }
+    body.printing-colrep #printRoot .col-street-title { font-size: 9px !important; margin: 3px 0 1px !important; }
+
+  
+    .flow3 { column-count: 3; column-gap: 4px; column-rule: 1px solid #e2e8f0; font-size: 11px; }
+    .st-h {
+      break-inside: avoid; color: #9a3412; border-bottom: 1.5px solid #9a3412;
+      font-size: 12px; font-weight: 700; padding: 3px 0; margin: 6px 0 2px;
+      display: flex; justify-content: space-between;
+    }
+    .st-row {
+      break-inside: avoid; display: flex; gap: 4px; line-height: 1.25;
+      border-bottom: 0.5px solid #e2e8f0; padding: 1px 0;
+    }
+    .st-row .n { width: 24px; flex-shrink: 0; font-weight: 700; font-size: 11px; }
+    .st-row .a { width: 30px; flex-shrink: 0; text-align: right; font-weight: 600; font-size: 11px; }
+    .st-row .nm { flex: 1; overflow: hidden; white-space: nowrap; font-size: 11px; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+  <div id="splashScreen">
+    <img src="jmr-logo.png" alt="JMR Apps" style="width:min(55vw,220px)">
+    <div class="splash-sub" style="letter-spacing:.15em">SMART APPS · BETTER LIFE</div>
+    <div class="splash-sub" style="margin-top:.5rem;font-size:10px;opacity:.7;letter-spacing:.12em">POWERED BY JMR APPS</div>
+  </div>
+
+  <!-- ==================== LOGIN SCREEN ==================== -->
+  <div id="loginScreen" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-900 p-4">
+    <div class="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8 fade-in">
+      <div class="text-center mb-6">
+        <div class="inline-block bg-purple-100 text-purple-800 text-xs font-bold px-3 py-1 rounded-full mb-3 tracking-wide">ADMIN PANEL</div>
+        <img src="logo-clean.png" alt="Smart Cable Manager" class="w-32 h-auto mx-auto mb-4">
+        <h1 class="text-xl font-bold text-slate-800">Smart Cable Manager</h1>
+        <p class="text-indigo-600 text-sm mt-1 font-medium">Admin Login</p>
+        <p class="text-slate-400 text-xs mt-1">My Cable Network</p>
+        <p class="text-slate-400 text-[10px] mt-3 tracking-wide">by JMR Apps</p>
+      </div>
+
+      <div id="loginError" class="hidden mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg"></div>
+
+      <form id="loginForm" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Admin Email</label>
+          <input type="email" id="loginEmail" required
+            class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
+            placeholder="admin@jsvcable.com">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Admin Password</label>
+          <input type="password" id="loginPassword" required
+            class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
+            placeholder="••••••••">
+        </div>
+        <button type="submit" id="loginBtn"
+          class="w-full bg-indigo-700 hover:bg-indigo-800 text-white font-semibold py-3 rounded-xl transition shadow-lg shadow-indigo-200">
+          Admin Login
+        </button>
+      </form>
+
+      <p class="text-center mt-2">
+        <a href="collector.html" class="text-xs text-emerald-600 hover:underline">Open Collector App →</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- ==================== MAIN APP ==================== -->
+  <div id="appScreen" class="hidden min-h-screen flex">
+
+    <!-- Mobile Overlay -->
+    <div id="sidebarOverlay" class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden" onclick="toggleSidebar()"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="fixed lg:static inset-y-0 left-0 z-50 w-64 bg-[#0b1220] text-white transform -translate-x-full lg:translate-x-0 transition-transform duration-300 flex flex-col">
+      <div class="p-4 border-b border-slate-800 flex items-center gap-3">
+        <img src="logo-clean.png" alt="Smart Cable Manager" class="w-11 h-11 object-contain">
+        <div>
+          <div class="font-bold text-sm tracking-tight">SMART CABLE MANAGER</div>
+          <div class="text-[10px] text-slate-400 font-medium tracking-wide">My Cable Network</div>
+        </div>
+      </div>
+
+      
+      <nav class="flex-1 overflow-y-auto py-3 px-2">
+        <div class="nav-section" data-i18n="navMain">Main</div>
+        <button onclick="showPage('dashboard')" class="sidebar-item w-full flex items-center gap-3 px-3 py-2 text-left text-sm active" data-page="dashboard">
+          <span class="w-5 text-center opacity-80">◆</span> <span data-i18n="dashboard">Dashboard</span>
+        </button>
+        <button onclick="showPage('customers')" class="sidebar-item w-full flex items-center gap-3 px-3 py-2 text-left text-sm" data-page="customers">
+          <span class="w-5 text-center opacity-80">◎</span> <span data-i18n="customers">Customers</span>
+        </button>
+        <button onclick="showPage('newCustomer')" class="sidebar-item w-full flex items-center gap-3 px-3 py-2 text-left text-sm" data-page="newCustomer">
+          <span class="w-5 text-center opacity-80">＋</span> <span data-i18n="newCustomer">New Customer</span>
+        </button>
+        <button onclick="showPage('billing')" class="sidebar-item w-full flex items-center gap-3 px-3 py-2 text-left text-sm" data-page="billing">
+          <span class="w-5 text-center opacity-80">₹</span> <span data-i18n="billing">Collect / Bill</span>
+        </button>
+        <button onclick="showPage('pending')" class="sidebar-item w-full flex items-center gap-3 px-3 py-2 text-left text-sm" data-page="pending">
+          <span class="w-5 text-center opacity-80">⚠</span> <span data-i18n="pending">Pending Due</span>
+        </button>
+
+        <div class="nav-section" data-i18n="navBoxes">Boxes</div>
+        <button onclick="showPage('boxes')" class="sidebar-item w-full flex items-center gap-3 px-3 py-2 text-left text-sm" data-page="boxes">
+          <span class="w-5 text-center opacity-80">▣</span> <span data-i18n="boxes">Box Stock</span>
+        </button>
+
+        <div class="nav-section" data-i18n="navReports">Reports</div>
+        <button onclick="showPage('reports')" class="sidebar-item w-full flex items-center gap-3 px-3 py-2 text-left text-sm" data-page="reports">
+          <span class="w-5 text-center opacity-80">▦</span> <span data-i18n="reports">Reports</span>
+        </button>
+        <button onclick="showPage('cancelled')" class="sidebar-item w-full flex items-center gap-3 px-3 py-2 text-left text-sm" data-page="cancelled">
+          <span class="w-5 text-center opacity-80">⊘</span> <span data-i18n="cancelled">Cancelled Bills</span>
+        </button>
+
+        <div class="nav-section" data-i18n="navSetup">Setup</div>
+        <button onclick="openMastersPanel('street')" class="sidebar-item w-full flex items-center gap-3 px-3 py-2 text-left text-sm" data-page="masters-street">
+          <span class="w-5 text-center opacity-80">⌂</span> <span data-i18n="streets">Streets</span>
+        </button>
+        <button onclick="openMastersPanel('package')" class="sidebar-item w-full flex items-center gap-3 px-3 py-2 text-left text-sm" data-page="masters-package">
+          <span class="w-5 text-center opacity-80">▦</span> <span data-i18n="packages">Packages</span>
+        </button>
+        <button onclick="openMastersPanel('mso')" class="sidebar-item w-full flex items-center gap-3 px-3 py-2 text-left text-sm" data-page="masters-mso">
+          <span class="w-5 text-center opacity-80">◈</span> <span data-i18n="mso">MSO</span>
+        </button>
+        <button onclick="openMastersPanel('employee')" class="sidebar-item w-full flex items-center gap-3 px-3 py-2 text-left text-sm" data-page="masters-employee">
+          <span class="w-5 text-center opacity-80">👤</span> <span data-i18n="collectors">Collectors</span>
+        </button>
+        <button onclick="openMastersPanel('company')" class="sidebar-item w-full flex items-center gap-3 px-3 py-2 text-left text-sm" data-page="masters-company">
+          <span class="w-5 text-center opacity-80">🏢</span> <span data-i18n="company">Company</span>
+        </button>
+        <div class="nav-section" data-i18n="navFinance">Finance</div>
+        <button onclick="showPage('expenses')" class="sidebar-item w-full flex items-center gap-3 px-3 py-2 text-left text-sm" data-page="expenses">
+          <span class="w-5 text-center opacity-80">₹</span> <span data-i18n="expenses">Expenses</span>
+        </button>
+        <button onclick="showPage('monthBill')" class="sidebar-item w-full flex items-center gap-3 px-3 py-2 text-left text-sm" data-page="monthBill">
+          <span class="w-5 text-center opacity-80">◷</span> <span data-i18n="monthBill">Month End</span>
+        </button>
+
+        <div class="nav-section" data-i18n="navSystem">System</div>
+        <button onclick="showPage('settings')" class="sidebar-item w-full flex items-center gap-3 px-3 py-2 text-left text-sm" data-page="settings">
+          <span class="w-5 text-center opacity-80">◇</span> <span data-i18n="settings">Settings</span>
+        </button>
+      </nav>
+
+      <div class="p-4 border-t border-slate-800">
+        <div class="text-xs text-slate-400 mb-2 truncate" id="userEmailDisplay">user@email.com</div>
+        <button onclick="logout()" class="w-full bg-red-600/20 hover:bg-red-600/40 text-red-400 py-2 rounded-lg text-sm transition">
+          <span data-i18n="logout">Logout</span>
+        </button>
+        <div class="text-center text-[10px] text-slate-500 mt-3 tracking-wide">by JMR Apps</div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col min-h-screen">
+      <!-- Top Bar -->
+      <header class="bg-white border-b border-slate-200 px-3 py-2.5 sticky top-0 z-30">
+        <div class="flex items-center gap-2 mb-2">
+          <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-lg hover:bg-slate-100 shrink-0">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </button>
+          <button type="button" id="globalBackBtn" onclick="goBackPage()" class="hidden text-slate-600 hover:text-indigo-600 text-sm font-medium px-2 py-1 rounded-lg border border-slate-200 bg-white shrink-0">← Back</button>
+          <h2 id="pageTitle" class="font-semibold text-base sm:text-lg shrink-0">Dashboard</h2>
+          <div class="flex-1"></div>
+          <div class="text-xs text-slate-500 hidden md:block" id="currentDate"></div>
+          <span id="offlineBadge" class="hidden text-[10px] font-semibold bg-amber-100 text-amber-800 px-2 py-1 rounded-full">Offline</span>
+          <span id="syncBadge" class="hidden text-[10px] font-semibold bg-blue-100 text-blue-800 px-2 py-1 rounded-full">Sync…</span>
+
+        </div>
+        <div class="relative">
+          <input type="text" id="globalSearch" oninput="globalCustomerSearch()" onkeydown="if(event.key==='Enter'){event.preventDefault();globalCustomerSearch(true);}"
+            placeholder="🔍 Search customer — Name / Mobile / Box / ID"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-slate-50">
+          <div id="globalSearchResults" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-72 overflow-y-auto z-50"></div>
+        </div>
+      </header>
+
+      <!-- Pages Container -->
+      <main class="flex-1 p-4 overflow-y-auto">
+
+        <!-- DASHBOARD -->
+        <div id="page-dashboard" class="page fade-in">
+          <!-- Summary -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-3">
+            <div class="soft-card p-5">
+              <div class="text-[11px] font-semibold tracking-wider text-slate-400 uppercase mb-2"><span data-i18n="dashToday">Today Collection</span></div>
+              <div class="text-2xl sm:text-3xl font-bold text-emerald-600 tracking-tight" id="statTodayCol">₹ 0</div>
+              <div class="text-xs text-slate-400 mt-2" id="statTodaySub"><span data-i18n="dashLive">Live · today</span></div>
+            </div>
+            <div class="soft-card p-5">
+              <div class="text-[11px] font-semibold tracking-wider text-slate-400 uppercase mb-2"><span data-i18n="dashMonth">Month Collection</span></div>
+              <div class="text-2xl sm:text-3xl font-bold text-indigo-600 tracking-tight" id="statMonthCol">₹ 0</div>
+              <div class="text-xs text-slate-400 mt-2" id="statMonthSub"><span data-i18n="dashThisMonth">This month</span></div>
+            </div>
+            <div class="soft-card p-5">
+              <div class="text-[11px] font-semibold tracking-wider text-slate-400 uppercase mb-2"><span data-i18n="dashTotalDue">Total Due</span></div>
+              <div class="text-2xl sm:text-3xl font-bold text-rose-600 tracking-tight" id="statDue">₹ 0</div>
+              <div class="text-xs text-slate-400 mt-2"><span id="statDueCnt">0</span> <span data-i18n="dashPendingCust">customers pending</span></div>
+            </div>
+          </div>
+          <div id="dashExpenseRow" class="grid grid-cols-2 gap-3 mb-6">
+            <div class="soft-card p-4 cursor-pointer" onclick="showPage('expenses')">
+              <div class="text-[10px] text-slate-400 uppercase font-semibold">Month Expenses</div>
+              <div class="text-xl font-bold text-rose-600 mt-1" id="statMonthExp">₹ 0</div>
+              <div class="text-[11px] text-slate-400 mt-1" id="statTodayExp">Today ₹0</div>
+            </div>
+            <div class="soft-card p-4">
+              <div class="text-[10px] text-slate-400 uppercase font-semibold">Net (Month)</div>
+              <div class="text-xl font-bold text-emerald-700 mt-1" id="statNetMonth">₹ 0</div>
+              <div class="text-[11px] text-slate-400 mt-1">Collection − Expenses</div>
+            </div>
+          </div>
+
+          <!-- Network + Agents -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+            <div class="soft-card p-5" id="dashNetworkCard">
+              <h3 class="text-sm font-semibold text-slate-800 mb-4"><span data-i18n="dashNetwork">Network Overview</span></h3>
+              <div class="grid grid-cols-2 gap-3 mb-4">
+                <div class="rounded-xl bg-slate-50 p-3">
+                  <div class="text-[10px] text-slate-400 font-medium uppercase" data-i18n="dashCustomers">Customers</div>
+                  <div class="text-xl font-bold text-slate-800 mt-0.5" id="statCustomers">0</div>
+                  <div class="text-[10px] text-slate-400 mt-1" id="statCustSplit">A: 0 · DC: 0</div>
+                </div>
+                <div class="rounded-xl bg-slate-50 p-3">
+                  <div class="text-[10px] text-slate-400 font-medium uppercase"><span data-i18n="dashTotalBox">Total Box</span></div>
+                  <div class="text-xl font-bold text-slate-800 mt-0.5" id="statBoxes">0</div>
+                </div>
+                <div class="rounded-xl bg-slate-50 p-3">
+                  <div class="text-[10px] text-slate-400 font-medium uppercase"><span data-i18n="dashWithCust">With Customers</span></div>
+                  <div class="text-xl font-bold text-slate-800 mt-0.5" id="statBoxAssigned">0</div>
+                </div>
+                <div class="rounded-xl bg-slate-50 p-3">
+                  <div class="text-[10px] text-slate-400 font-medium uppercase"><span data-i18n="dashInStore">In Store</span></div>
+                  <div class="text-xl font-bold text-slate-800 mt-0.5" id="statBoxBalance">0</div>
+                </div>
+              </div>
+              <div class="text-[11px] text-slate-500 mb-1.5 flex justify-between">
+                <span>Active vs DC</span>
+                <span id="statActivePct">—</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill bg-indigo-500" id="statActiveBar" style="width:0%"></div>
+              </div>
+            </div>
+
+            <div class="soft-card p-5">
+              <h3 class="text-sm font-semibold text-slate-800 mb-3"><span data-i18n="dashByAgent">Collection by Agent</span></h3>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="text-[10px] uppercase tracking-wide text-slate-400 border-b">
+                      <th class="text-left py-2 font-medium" data-i18n="dashAgent">Agent</th>
+                      <th class="text-right py-2 font-medium" data-i18n="dashColToday">Today</th>
+                      <th class="text-right py-2 font-medium" data-i18n="dashColMonth">This Month</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100">
+                    <tr>
+                      <td class="py-2.5 font-medium text-slate-700">UMA<br><span class="text-[10px] text-slate-400 font-normal" id="agentUmaCnt">0 bills today</span></td>
+                      <td class="py-2.5 text-right font-bold text-blue-600" id="agentUmaToday">₹0</td>
+                      <td class="py-2.5 text-right font-bold text-slate-900" id="agentUma">₹0</td>
+                    </tr>
+                    <tr>
+                      <td class="py-2.5 font-medium text-slate-700">MUTHUMARI<br><span class="text-[10px] text-slate-400 font-normal" id="agentMuthuCnt">0 bills today</span></td>
+                      <td class="py-2.5 text-right font-bold text-emerald-600" id="agentMuthuToday">₹0</td>
+                      <td class="py-2.5 text-right font-bold text-slate-900" id="agentMuthu">₹0</td>
+                    </tr>
+                    <tr>
+                      <td class="py-2.5 font-medium text-slate-700">OFFICE<br><span class="text-[10px] text-slate-400 font-normal" id="agentOfficeCnt">0 bills today</span></td>
+                      <td class="py-2.5 text-right font-bold text-violet-600" id="agentOfficeToday">₹0</td>
+                      <td class="py-2.5 text-right font-bold text-slate-900" id="agentOffice">₹0</td>
+                    </tr>
+                    <tr>
+                      <td class="py-2.5 font-medium text-slate-700">ONLINE<br><span class="text-[10px] text-slate-400 font-normal" id="agentOnlineCnt">0 bills today</span></td>
+                      <td class="py-2.5 text-right font-bold text-amber-600" id="agentOnlineToday">₹0</td>
+                      <td class="py-2.5 text-right font-bold text-slate-900" id="agentOnline">₹0</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="text-[10px] text-slate-400 mt-3 text-right hidden" id="agentOtherWrap">Other (month): <span id="agentOther">₹0</span></div>
+              <!-- hidden legacy for progress bars if any code refs -->
+              <div class="hidden">
+                <span id="agentUmaPct"></span><span id="agentMuthuPct"></span><span id="agentOfficePct"></span><span id="agentOnlinePct"></span>
+                <div id="agentUmaBar"></div><div id="agentMuthuBar"></div><div id="agentOfficeBar"></div><div id="agentOnlineBar"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- <span data-i18n="dashQuick">Quick Actions</span> -->
+          <div class="soft-card p-5">
+            <h3 class="text-sm font-semibold text-slate-800 mb-4">Quick Actions</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <button onclick="showPage('newCustomer')" class="card-hover text-left soft-card p-4 flex gap-3 items-start border border-slate-100 hover:border-indigo-200">
+                <span class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-lg font-bold shrink-0">＋</span>
+                <span>
+                  <span class="block font-semibold text-sm text-slate-800"><span data-i18n="dashNewCust">New Customer</span></span>
+                  <span class="block text-xs text-slate-400 mt-0.5"><span data-i18n="dashAddSub">Add a new subscriber</span></span>
+                </span>
+              </button>
+              <button onclick="showPage('billing')" class="card-hover text-left soft-card p-4 flex gap-3 items-start border border-slate-100 hover:border-emerald-200">
+                <span class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg font-bold shrink-0">₹</span>
+                <span>
+                  <span class="block font-semibold text-sm text-slate-800"><span data-i18n="dashCreateBill">Create Bill</span></span>
+                  <span class="block text-xs text-slate-400 mt-0.5">Record collection</span>
+                </span>
+              </button>
+              <button onclick="showPage('pending')" class="card-hover text-left soft-card p-4 flex gap-3 items-start border border-slate-100 hover:border-rose-200">
+                <span class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-lg font-bold shrink-0">⚠</span>
+                <span>
+                  <span class="block font-semibold text-sm text-slate-800" data-i18n="repPending">Pending / Due</span>
+                  <span class="block text-xs text-slate-400 mt-0.5"><span data-i18n="dashOutPay">Outstanding payments</span></span>
+                </span>
+              </button>
+              <button onclick="showPage('customers')" class="card-hover text-left soft-card p-4 flex gap-3 items-start border border-slate-100 hover:border-slate-300">
+                <span class="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-lg font-bold shrink-0">◎</span>
+                <span>
+                  <span class="block font-semibold text-sm text-slate-800" data-i18n="customers">Customers</span>
+                  <span class="block text-xs text-slate-400 mt-0.5"><span data-i18n="dashManageSub">Manage subscribers</span></span>
+                </span>
+              </button>
+              <button onclick="showPage('boxes')" class="card-hover text-left soft-card p-4 flex gap-3 items-start border border-slate-100 hover:border-slate-300">
+                <span class="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-lg font-bold shrink-0">▣</span>
+                <span>
+                  <span class="block font-semibold text-sm text-slate-800"><span data-i18n="dashBoxMgmt">Box Management</span></span>
+                  <span class="block text-xs text-slate-400 mt-0.5"><span data-i18n="dashTrackStb">Track STB / stock</span></span>
+                </span>
+              </button>
+              <button onclick="showPage('settings')" class="card-hover text-left soft-card p-4 flex gap-3 items-start border border-slate-100 hover:border-slate-300">
+                <span class="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-lg font-bold shrink-0">◷</span>
+                <span>
+                  <span class="block font-semibold text-sm text-slate-800"><span data-i18n="dashNextBill">Next Month Bill</span></span>
+                  <span class="block text-xs text-slate-400 mt-0.5"><span data-i18n="dashGenOnce">Generate once per month</span></span>
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        
+
+        
+
+        <!-- CUSTOMERS LIST -->
+        <div id="page-customers" class="page hidden fade-in">
+          <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 mb-4">
+            <div class="flex flex-col sm:flex-row gap-3">
+              <input type="text" id="searchInput" placeholder="Search Name / Mobile / Box / ID..." 
+                class="flex-1 px-4 py-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                oninput="searchCustomers()">
+              <select id="statusFilter" onchange="searchCustomers()" class="px-4 py-2.5 border border-slate-300 rounded-xl outline-none">
+                <option value="">All Status</option>
+                <option value="ACT">Active</option>
+                <option value="DC">DC</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-slate-50 text-slate-600">
+                  <tr>
+                    <th class="text-left px-3 py-3 font-medium">ID</th>
+                    <th class="text-left px-3 py-3 font-medium">Name</th>
+                    <th class="text-left px-3 py-3 font-medium">Mobile</th>
+                    <th class="text-left px-3 py-3 font-medium">Box</th>
+                    <th class="text-left px-3 py-3 font-medium">Due</th>
+                    <th class="text-left px-3 py-3 font-medium">Status</th>
+                    <th class="text-left px-3 py-3 font-medium">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="customerTableBody">
+                  <tr><td colspan="7" class="text-center py-8 text-slate-400">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- NEW / EDIT CUSTOMER -->
+        <div id="page-newCustomer" class="page hidden fade-in">
+          <form id="customerForm" class="space-y-4 max-w-4xl">
+            <input type="hidden" id="editCustomerId">
+            <input type="hidden" id="custBilling" value="Yes">
+            <input type="hidden" id="custBillingStart" value="">
+
+            <!-- ESSENTIAL -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+              <h3 class="font-semibold text-base mb-3 text-blue-700 border-b pb-2" id="customerFormTitle">New Customer</h3>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Customer Name *</label>
+                  <input type="text" id="custName" required class="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Mobile *</label>
+                  <input type="tel" id="custMobile" required class="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Place / Area *</label>
+                  <select id="custPlace" onchange="onPlaceSelect()" class="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white">
+                    <option value="">- Select Area -</option>
+                    <option value="AREA 1">AREA 1</option>
+                    <option value="AREA 2">AREA 2</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Street *</label>
+                  <select id="custStreet" onchange="onStreetSelect()" class="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white">
+                    <option value="">- Select Street -</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Customer ID</label>
+                  <div class="flex gap-2">
+                    <input type="text" id="custCustId" placeholder="Auto / manual" class="flex-1 px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono">
+                    <select id="custIdSuffix" onchange="onStreetSelect()" class="w-16 px-2 py-2 border rounded-lg text-sm bg-white" title="A/B/C/D">
+                      <option value="">—</option>
+                      <option value="A">A</option>
+                      <option value="B">B</option>
+                      <option value="C">C</option>
+                      <option value="D">D</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">MSO *</label>
+                  <select id="custMSO" class="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white">
+                    <option value="">- Select MSO -</option>
+                    <option value="SPCHE0077">SPCHE0077</option>
+                    <option value="SPCHE5981">SPCHE5981</option>
+                    <option value="TACTV25215">TACTV25215</option>
+                    <option value="TACTV25257">TACTV25257</option>
+                    <option value="SCV">SCV</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Box No</label>
+                  <input type="text" id="custBox" oninput="checkBoxDuplicate()" onblur="checkBoxDuplicate()" class="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                  <p id="boxDupTip" class="text-xs mt-1 hidden"></p>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">SC / Smart Card</label>
+                  <input type="text" id="custSC" class="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Box Type</label>
+                  <select id="custBoxType" class="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                    <option value="HD">HD</option>
+                    <option value="SD">SD</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Package</label>
+                  <select id="custPackage" onchange="onPackageChange()" class="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white">
+                    <option value="">Select Package</option>
+                    <option value="PLAN 100" data-amt="100">PLAN 100</option>
+                    <option value="PLAN 150" data-amt="150">PLAN 150</option>
+                    <option value="PLAN 180" data-amt="180">PLAN 180</option>
+                    <option value="PLAN 200" data-amt="200">PLAN 200</option>
+                    <option value="PLAN 220" data-amt="220">PLAN 220</option>
+                    <option value="PLAN 230" data-amt="230">PLAN 230</option>
+                    <option value="PLAN 250" data-amt="250">PLAN 250</option>
+                    <option value="PLAN 260" data-amt="260">PLAN 260</option>
+                    <option value="PLAN 275" data-amt="275">PLAN 275</option>
+                    <option value="PLAN 280" data-amt="280">PLAN 280</option>
+                    <option value="PLAN 290" data-amt="290">PLAN 290</option>
+                    <option value="PLAN 300" data-amt="300">PLAN 300</option>
+                    <option value="PLAN 305" data-amt="305">PLAN 305</option>
+                    <option value="PLAN 310" data-amt="310">PLAN 310</option>
+                    <option value="PLAN 315" data-amt="315">PLAN 315</option>
+                    <option value="PLAN 325" data-amt="325">PLAN 325</option>
+                    <option value="PLAN 350" data-amt="350">PLAN 350</option>
+                    <option value="PLAN 380" data-amt="380">PLAN 380</option>
+                    <option value="PLAN 400" data-amt="400">PLAN 400</option>
+                    <option value="PLAN 450" data-amt="450">PLAN 450</option>
+                    <option value="PLAN 500" data-amt="500">PLAN 500</option>
+                    <option value="PLAN 550" data-amt="550">PLAN 550</option>
+                    <option value="PLAN 600" data-amt="600">PLAN 600</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Package Amount</label>
+                  <input type="number" id="custPkgAmt" oninput="recalcPackageTotal()" class="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Due Amount</label>
+                  <input type="number" id="custDueAmt" class="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                </div>
+                <input type="hidden" id="custStatus" value="ACT">
+                <input type="hidden" id="custDoor" value="">
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Connection Date</label>
+                  <input type="date" id="custConDate" onchange="calcNewConnectionBilling()" class="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                </div>
+              </div>
+
+              <!-- Add-ons -->
+              <div class="mt-4 border-t pt-3">
+                <div class="text-xs font-medium text-slate-600 mb-2">Add-on Channels</div>
+                <div class="flex flex-col sm:flex-row gap-2 mb-2">
+                  <input type="text" id="addonNameInput" placeholder="Channel name (e.g. Jothi TV)" class="flex-1 px-3 py-2 border rounded-lg text-sm">
+                  <input type="number" id="addonAmtInput" placeholder="₹" class="w-24 px-3 py-2 border rounded-lg text-sm" inputmode="numeric">
+                  <button type="button" onclick="addCustomAddon()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium">+ Add</button>
+                </div>
+                <div id="addonChips" class="flex flex-wrap gap-2 min-h-[2rem]"></div>
+                <div class="mt-2 flex justify-between text-sm">
+                  <span>Add-on: <span id="addonTotalDisp" class="font-semibold">₹0</span></span>
+                  <span>Monthly Total: <span id="pkgTotalDisp" class="font-bold text-blue-700">₹0</span></span>
+                </div>
+                <input type="hidden" id="custAddons" value="[]">
+                <input type="hidden" id="custAddonAmt" value="0">
+              </div>
+            </div>
+
+            <!-- MORE OPTIONS (collapsed) -->
+            <details class="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+              <summary class="font-medium text-sm text-slate-600 cursor-pointer select-none">More options (optional fields)</summary>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Father Name</label>
+                  <input type="text" id="custFather" class="w-full px-3 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Landmark</label>
+                  <input type="text" id="custLandmark" class="w-full px-3 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">EB No</label>
+                  <input type="text" id="custEB" class="w-full px-3 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Other Charges</label>
+                  <input type="number" id="custOtherCharges" class="w-full px-3 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Discount</label>
+                  <input type="number" id="custDiscount" class="w-full px-3 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Discount Reason</label>
+                  <input type="text" id="custDisReason" class="w-full px-3 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Signal Type</label>
+                  <select id="custSignal" class="w-full px-3 py-2 border rounded-lg text-sm">
+                    <option value="Digital">Digital</option>
+                    <option value="Analog">Analog</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Aadhar No</label>
+                  <input type="text" id="custAadhar" class="w-full px-3 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">CAF No</label>
+                  <input type="text" id="custCAF" class="w-full px-3 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Reg Date</label>
+                  <input type="date" id="custRegDate" class="w-full px-3 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Box Amount</label>
+                  <input type="number" id="custBoxAmt" class="w-full px-3 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1 text-slate-600">SMS</label>
+                  <select id="custSMS" class="w-full px-3 py-2 border rounded-lg text-sm">
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                  </select>
+                </div>
+                <div class="sm:col-span-2">
+                  <label class="block text-xs font-medium mb-1 text-slate-600">Remarks</label>
+                  <textarea id="custRemarks" rows="2" class="w-full px-3 py-2 border rounded-lg text-sm"></textarea>
+                </div>
+              </div>
+            </details>
+
+            <div class="flex gap-3 pt-1 pb-4">
+              <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-medium transition text-sm">Save Customer</button>
+              <button type="button" onclick="showPage('customers')" class="bg-slate-200 hover:bg-slate-300 px-6 py-2.5 rounded-xl font-medium transition text-sm">Cancel</button>
+              <button type="button" onclick="document.getElementById('customerForm').reset(); currentAddons=[]; if(typeof renderAddonChips==='function') renderAddonChips();" class="bg-amber-100 hover:bg-amber-200 text-amber-800 px-6 py-2.5 rounded-xl font-medium transition text-sm">Clear</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- BILLING -->
+        <div id="page-billing" class="page hidden fade-in">
+          <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 max-w-2xl">
+            <h3 class="font-semibold text-lg mb-4">New Bill / Collection</h3>
+            <form id="billForm" class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium mb-1">Search Customer (Name / Mobile / Box)</label>
+                <input type="text" id="billSearch" class="w-full px-3 py-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" placeholder="Type to search..." oninput="searchForBill()">
+                <div id="billSearchResults" class="mt-2 max-h-40 overflow-y-auto hidden border rounded-xl"></div>
+              </div>
+
+              <div id="selectedCustomerInfo" class="hidden bg-blue-50 p-3 rounded-xl text-sm">
+                <div class="font-medium" id="billCustName">-</div>
+                <div class="text-slate-600" id="billCustDetails">-</div>
+              </div>
+
+              <input type="hidden" id="billCustomerId">
+
+              <div id="billDueHint" class="hidden text-xs bg-amber-50 border border-amber-100 text-amber-800 rounded-xl px-3 py-2"></div>
+
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium mb-1">Amount *</label>
+                  <input type="number" id="billAmount" required min="1" step="1" oninput="updateBillPayHint()" class="w-full px-3 py-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                  <p id="billPayType" class="text-[10px] text-slate-500 mt-1"></p>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium mb-1">Date</label>
+                  <input type="date" id="billDate" readonly class="w-full px-3 py-2.5 border rounded-xl bg-slate-100 outline-none">
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium mb-1">Payment Mode</label>
+                <select id="billMode" class="w-full px-3 py-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="Cash">Cash</option>
+                  <option value="UPI">UPI / GPay</option>
+                  <option value="Bank">Bank Transfer</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium mb-1">Remarks</label>
+                <input type="text" id="billRemarks" class="w-full px-3 py-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" placeholder="Optional">
+              </div>
+
+              <label class="flex items-center gap-2 text-sm text-slate-600">
+                <input type="checkbox" id="billPrintReceipt" checked class="rounded">
+                Save பிறகு Receipt print
+              </label>
+
+              <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-medium transition">Save Collection</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- CUSTOMER LEDGER -->
+        
+        <div id="page-ledger" class="page hidden fade-in">
+          <!-- Profile header -->
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-3">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <h3 class="font-bold text-lg text-slate-900 truncate" id="ledgerCustName">-</h3>
+                  <span id="ledgerStatus" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700">ACTIVE</span>
+                </div>
+                <p class="text-xs text-slate-500 mt-0.5" id="ledgerStreetLine">-</p>
+                <p class="text-sm text-slate-700 mt-1.5" id="ledgerCustInfo">-</p>
+              </div>
+              <div class="flex gap-1.5 shrink-0">
+                <a id="ledgerCallBtn" href="#" class="w-9 h-9 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center text-sm border border-emerald-100">📞</a>
+                <a id="ledgerWaBtn" href="#" target="_blank" rel="noopener" class="w-9 h-9 rounded-full bg-green-50 text-green-700 flex items-center justify-center text-sm border border-green-100">💬</a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Due card -->
+          <div id="ledgerDueCard" class="rounded-2xl p-4 mb-3 border border-slate-100 bg-gradient-to-br from-slate-50 to-white">
+            <div class="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">Current Due</div>
+            <div class="text-3xl font-bold text-slate-900 mt-0.5" id="ledgerDue">₹0</div>
+            <div class="text-xs text-slate-500 mt-1" id="ledgerDueHint">✓ Paid up</div>
+          </div>
+
+          <!-- Quick actions -->
+          <div class="grid grid-cols-2 gap-2 mb-3">
+            <button type="button" onclick="startBillForLedger()" class="col-span-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl text-sm font-semibold shadow-sm">💰 Collect Payment</button>
+            <button type="button" onclick="editCustomer(currentLedgerCustomerId)" class="bg-white border border-slate-200 py-2.5 rounded-xl text-sm font-medium text-slate-700">✏️ Edit</button>
+            <button type="button" onclick="ledgerQuickPackage()" class="bg-white border border-slate-200 py-2.5 rounded-xl text-sm font-medium text-slate-700">📦 Package</button>
+            <button type="button" onclick="ledgerToggleDC()" id="ledgerDcBtn" class="bg-white border border-red-100 py-2.5 rounded-xl text-sm font-medium text-red-600">🔴 DC</button>
+            <button type="button" onclick="ledgerQuickTransfer()" class="bg-white border border-slate-200 py-2.5 rounded-xl text-sm font-medium text-slate-700">↔ Transfer</button>
+          </div>
+
+          <!-- Connection details -->
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-3">
+            <div class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Connection Details</div>
+            <div class="space-y-2.5 text-sm">
+              <div class="flex justify-between gap-2"><span class="text-slate-400">MSO</span><span class="font-medium" id="ledgerMso">-</span></div>
+              <div class="flex justify-between gap-2 items-start">
+                <span class="text-slate-400 shrink-0">VC / SC</span>
+                <button type="button" id="ledgerVcBtn" onclick="copyLedgerField('vc')" class="font-mono font-medium text-right break-all text-slate-800">-</button>
+              </div>
+              <div class="flex justify-between gap-2 items-start">
+                <span class="text-slate-400 shrink-0">Box</span>
+                <button type="button" id="ledgerBoxBtn" onclick="copyLedgerField('box')" class="font-mono font-bold text-blue-700 text-right break-all">-</button>
+              </div>
+              <div class="flex justify-between gap-2"><span class="text-slate-400">Connected</span><span class="font-medium" id="ledgerConDate">-</span></div>
+              <div class="flex justify-between gap-2 items-start"><span class="text-slate-400 shrink-0">Package</span><span class="font-medium text-right" id="ledgerPkg">-</span></div>
+              <div class="flex justify-between gap-2 items-start"><span class="text-slate-400 shrink-0">Add-on</span><span class="font-medium text-right text-xs" id="ledgerCafAddon">-</span></div>
+            </div>
+          </div>
+
+          <!-- Payment timeline -->
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-3">
+            <div class="px-4 py-3 border-b border-slate-100 flex justify-between items-center">
+              <span class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Payment History</span>
+              <button type="button" onclick="showPage('customers')" class="text-xs text-blue-600">← Back</button>
+            </div>
+            <div id="ledgerTimeline" class="divide-y divide-slate-50">
+              <div class="p-6 text-center text-slate-400 text-sm">Loading...</div>
+            </div>
+            <div id="ledgerPayTotal" class="hidden"></div>
+          </div>
+
+          <!-- Activity Log -->
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-3">
+            <div class="px-4 py-3 border-b border-slate-100">
+              <span class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Activity Log</span>
+            </div>
+            <div id="ledgerActivity" class="divide-y divide-slate-50 max-h-80 overflow-y-auto">
+              <div class="p-6 text-center text-slate-400 text-sm">Loading...</div>
+            </div>
+          </div>
+          <table class="hidden"><tbody id="ledgerTableBody"></tbody></table>
+        </div>
+
+        <!-- PENDING / DUE REPORT -->
+        <div id="page-pending" class="page hidden fade-in">
+          <div class="bg-green-50 border border-green-200 rounded-xl p-3 mb-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
+            <div class="text-sm text-green-800">
+              <div class="font-medium">WhatsApp Due Reminder</div>
+              <div class="text-xs mb-1" id="waQueueInfo"></div>
+              <select id="waQueueTpl" class="mt-1 px-2 py-1.5 border rounded-lg text-xs bg-white max-w-full"></select>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="startWaQueue()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium">Start WA Queue</button>
+              <button onclick="skipWa()" class="bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium">Next →</button>
+            </div>
+          </div>
+          <div id="waQueueBar" class="hidden"></div>
+          <div class="bg-white rounded-xl shadow-sm border p-3 mb-4">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+              <div>
+                <label class="text-xs text-slate-500">Area</label>
+                <select id="pendFilterArea" onchange="onPendingFilterChange()" class="w-full px-2 py-2 border rounded-lg bg-white">
+                  <option value="">All Areas</option>
+                  <option value="AREA 1">AREA 1</option>
+                  <option value="AREA 2">AREA 2</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs text-slate-500">Street</label>
+                <select id="pendFilterStreet" onchange="renderPendingReport()" class="w-full px-2 py-2 border rounded-lg bg-white">
+                  <option value="">All Streets</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs text-slate-500">MSO</label>
+                <select id="pendFilterMso" onchange="renderPendingReport()" class="w-full px-2 py-2 border rounded-lg bg-white">
+                  <option value="">All MSO</option>
+                </select>
+              </div>
+              <div class="flex items-end gap-1 flex-wrap">
+                <button type="button" onclick="exportPendingBoxes()" class="bg-indigo-600 text-white px-2 py-2 rounded-lg text-xs font-medium">Copy Box</button>
+                <button type="button" onclick="copyPendingMobiles()" class="bg-emerald-600 text-white px-2 py-2 rounded-lg text-xs font-medium">Copy Mobiles</button>
+                <button type="button" onclick="copyPendingSmsText()" class="bg-amber-600 text-white px-2 py-2 rounded-lg text-xs font-medium">Copy SMS Text</button>
+                <button type="button" onclick="printPendingReport()" class="bg-slate-800 text-white px-3 py-2 rounded-lg text-xs font-medium shrink-0">🖨</button>
+              </div>
+            </div>
+                      </div>
+          <div class="grid grid-cols-2 gap-3 mb-4">
+            <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+              <div class="text-xs text-slate-500">Pending (filtered)</div>
+              <div class="text-2xl font-bold text-red-600" id="pendingCount">0</div>
+            </div>
+            <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+              <div class="text-xs text-slate-500">Total Due</div>
+              <div class="text-2xl font-bold text-red-600" id="pendingTotal">₹0</div>
+            </div>
+          </div>
+          <div id="pendingPrintArea">
+            <div class="px-1 py-1 text-sm font-semibold mb-2 no-print" id="pendingPrintTitle">Pending List</div>
+            <!-- Mobile cards -->
+            <div id="pendingCards" class="space-y-2 mb-4 md:hidden"></div>
+            <!-- Desktop table -->
+            <div class="hidden md:block bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+              <div class="overflow-x-auto max-h-[70vh] overflow-y-auto">
+                <table class="w-full text-sm">
+                  <thead class="bg-slate-50 text-slate-600 sticky top-0">
+                    <tr>
+                      <th class="text-left px-3 py-3 font-medium">ID</th>
+                      <th class="text-left px-3 py-3 font-medium">Name / Street</th>
+                      <th class="text-left px-3 py-3 font-medium">Mobile</th>
+                      <th class="text-left px-3 py-3 font-medium">Box</th>
+                      <th class="text-left px-3 py-3 font-medium">MSO</th>
+                      <th class="text-left px-3 py-3 font-medium">Due</th>
+                      <th class="text-left px-3 py-3 font-medium">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pendingTableBody">
+                    <tr><td colspan="7" class="text-center py-8 text-slate-400">Loading...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- BOX MANAGEMENT -->
+        <div id="page-boxes" class="page hidden fade-in">
+          <div class="grid grid-cols-3 gap-3 mb-4">
+            <div class="bg-white rounded-xl p-3 shadow-sm border text-center">
+              <div class="text-xs text-slate-500">In Store</div>
+              <div class="text-xl font-bold text-green-600" id="boxStockCount">0</div>
+            </div>
+            <div class="bg-white rounded-xl p-3 shadow-sm border text-center">
+              <div class="text-xs text-slate-500">With Customers</div>
+              <div class="text-xl font-bold text-blue-600" id="boxAssignedCount">0</div>
+            </div>
+            <div class="bg-white rounded-xl p-3 shadow-sm border text-center">
+              <div class="text-xs text-slate-500">Total</div>
+              <div class="text-xl font-bold text-slate-700" id="boxCountDisplay">0</div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl shadow-sm border p-4 mb-4">
+            <h3 class="font-semibold mb-3 text-sm">Purchase / Add Box</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              <div>
+                <label class="text-xs text-slate-500">Type</label>
+                <select id="newBoxPurType" class="w-full px-3 py-2 border rounded-lg bg-white">
+                  <option value="New">New</option>
+                  <option value="Exchange">Exchange</option>
+                  <option value="Return">Return</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs text-slate-500">Invoice Number</label>
+                <input type="text" id="newBoxInvNo" placeholder="Invoice No" class="w-full px-3 py-2 border rounded-lg">
+              </div>
+              <div>
+                <label class="text-xs text-slate-500">Invoice Date</label>
+                <input type="date" id="newBoxInvDate" class="w-full px-3 py-2 border rounded-lg">
+              </div>
+              <div>
+                <label class="text-xs text-slate-500">MSO Name *</label>
+                <select id="newBoxMso" class="w-full px-3 py-2 border rounded-lg bg-white">
+                  <option value="">- Select MSO -</option>
+                  <option value="SPCHE0077">SPCHE0077</option>
+                  <option value="SPCHE5981">SPCHE5981</option>
+                  <option value="TACTV25215">TACTV25215</option>
+                  <option value="TACTV25257">TACTV25257</option>
+                  <option value="SCV">SCV</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs text-slate-500">Box Type</label>
+                <select id="newBoxType" class="w-full px-3 py-2 border rounded-lg bg-white">
+                  <option value="HD">HD</option>
+                  <option value="SD">SD</option>
+                  <option value="HD+">HD+</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs text-slate-500">SC No. *</label>
+                <input type="text" id="newBoxScNo" placeholder="Smart Card / SC Number" class="w-full px-3 py-2 border rounded-lg">
+              </div>
+              <div>
+                <label class="text-xs text-slate-500">Box Number *</label>
+                <input type="text" id="newBoxNo" placeholder="Box Number" class="w-full px-3 py-2 border rounded-lg">
+              </div>
+            </div>
+            <div class="flex flex-wrap gap-2 mt-3">
+              <button onclick="addBoxToStock()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium">Save</button>
+              <button onclick="clearBoxForm()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm">Clear</button>
+              <button onclick="syncBoxesFromCustomers()" class="text-xs text-blue-600 hover:underline ml-auto self-center">Sync from customers</button>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl shadow-sm border p-4 mb-4">
+            <h3 class="font-semibold mb-2 text-sm">Import MSO Box List</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm mb-2">
+              <div>
+                <label class="text-xs text-slate-500">MSO *</label>
+                <select id="importBoxMso" class="w-full px-3 py-2 border rounded-lg bg-white">
+                  <option value="">- Select MSO -</option>
+                  <option value="SPCHE0077">SPCHE0077</option>
+                  <option value="SPCHE5981">SPCHE5981</option>
+                  <option value="TACTV25215">TACTV25215</option>
+                  <option value="TACTV25257">TACTV25257</option>
+                  <option value="SCV">SCV</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs text-slate-500">Box Type</label>
+                <select id="importBoxType" class="w-full px-3 py-2 border rounded-lg bg-white">
+                  <option value="HD">HD</option>
+                  <option value="SD">SD</option>
+                </select>
+              </div>
+            </div>
+            <textarea id="importBoxText" rows="6" class="w-full px-3 py-2 border rounded-lg text-xs font-mono" placeholder="ஒரு line-க்கு ஒரு Box No&#10;அல்லது: BoxNo, SCNo&#10;&#10;எ.கா.&#10;0000838400090D14&#10;0B00F0B8, 1234567890"></textarea>
+            <div class="flex gap-2 mt-2">
+              <button type="button" onclick="importMsoBoxList()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium">Import + Auto Match</button>
+              <button type="button" onclick="document.getElementById('importBoxText').value=''" class="bg-slate-200 px-4 py-2 rounded-lg text-sm">Clear</button>
+            </div>
+            <p class="text-xs text-slate-400 mt-2" id="importBoxStatus"></p>
+          </div>
+
+          <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <div class="px-4 py-2 bg-slate-50 border-b flex gap-2 text-sm">
+              <button onclick="renderBoxList('available')" id="boxTabAvail" class="px-3 py-1 rounded-lg bg-green-100 text-green-800 font-medium">Store</button>
+              <button onclick="renderBoxList('assigned')" id="boxTabAssign" class="px-3 py-1 rounded-lg hover:bg-slate-100">Assigned</button>
+              <button onclick="renderBoxList('all')" id="boxTabAll" class="px-3 py-1 rounded-lg hover:bg-slate-100">All</button>
+            </div>
+            <div class="overflow-x-auto max-h-96 overflow-y-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-slate-50 text-slate-600 sticky top-0">
+                  <tr>
+                    <th class="text-left px-2 py-2 text-xs">Box No</th>
+                    <th class="text-left px-2 py-2 text-xs">SC No</th>
+                    <th class="text-left px-2 py-2 text-xs">MSO</th>
+                    <th class="text-left px-2 py-2 text-xs">Type</th>
+                    <th class="text-left px-2 py-2 text-xs">Status</th>
+                    <th class="text-left px-2 py-2 text-xs">Customer</th>
+                  </tr>
+                </thead>
+                <tbody id="boxTableBody">
+                  <tr><td colspan="4" class="text-center py-6 text-slate-400">Open this page to load</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- REPORTS (Placeholder) -->
+        <div id="page-reports" class="page hidden fade-in">
+          <!-- Report menu -->
+          
+          <div id="reportMenu" class="no-print space-y-4 mb-4">
+            <div>
+              <div class="text-[10px] font-semibold tracking-wider text-slate-400 uppercase mb-1.5 px-0.5">💰 <span data-i18n="secCollection">Collection</span></div>
+              <div class="space-y-2">
+                <button type="button" onclick="openReport('agentDay')" class="w-full soft-card px-3 py-3 text-left card-hover flex gap-3 items-center">
+                  <span class="text-lg">👤</span>
+                  <span class="min-w-0"><span class="block font-semibold text-sm" data-i18n="repCollection">Collection Report</span>
+                  <span class="block text-[11px] text-slate-500">UMA · Muthumari · Office · Online</span></span>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <div class="text-[10px] font-semibold tracking-wider text-slate-400 uppercase mb-1.5 px-0.5">👥 <span data-i18n="secCustomers">Customers</span></div>
+              <div class="space-y-2">
+                <button type="button" onclick="openReport('customers')" class="w-full soft-card px-3 py-3 text-left card-hover flex gap-3 items-center">
+                  <span class="text-lg">📋</span>
+                  <span class="min-w-0"><span class="block font-semibold text-sm" data-i18n="repCustomerList">Customer List</span>
+                  <span class="block text-[11px] text-slate-500">All · Active · DC · filters</span></span>
+                </button>
+                <button type="button" onclick="showPage('pending')" class="w-full soft-card px-3 py-3 text-left card-hover flex gap-3 items-center">
+                  <span class="text-lg">⚠️</span>
+                  <span class="min-w-0"><span class="block font-semibold text-sm" data-i18n="repPending">Pending / Due</span>
+                  <span class="block text-[11px] text-slate-500">Outstanding · filters · WhatsApp</span></span>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <div class="text-[10px] font-semibold tracking-wider text-slate-400 uppercase mb-1.5 px-0.5">🔌 <span data-i18n="secService">Service</span></div>
+              <div class="space-y-2">
+                <button type="button" onclick="openReport('dc')" class="w-full soft-card px-3 py-3 text-left card-hover flex gap-3 items-center">
+                  <span class="text-lg">🔌</span>
+                  <span class="min-w-0"><span class="block font-semibold text-sm" data-i18n="repDc">DC List</span>
+                  <span class="block text-[11px] text-slate-500">Disconnected customers</span></span>
+                </button>
+                <button type="button" onclick="openReport('newConn')" class="w-full soft-card px-3 py-3 text-left card-hover flex gap-3 items-center">
+                  <span class="text-lg">🆕</span>
+                  <span class="min-w-0"><span class="block font-semibold text-sm" data-i18n="repNewConn">New Connection</span>
+                  <span class="block text-[11px] text-slate-500">This month · Area · Package</span></span>
+                </button>
+                <button type="button" onclick="openReport('transfer')" class="w-full soft-card px-3 py-3 text-left card-hover flex gap-3 items-center">
+                  <span class="text-lg">🔄</span>
+                  <span class="min-w-0"><span class="block font-semibold text-sm" data-i18n="repTransfer">Transfer Report</span>
+                  <span class="block text-[11px] text-slate-500">Street / Area change history</span></span>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <div class="text-[10px] font-semibold tracking-wider text-slate-400 uppercase mb-1.5 px-0.5">💵 <span data-i18n="secBilling">Billing</span></div>
+              <div class="space-y-2">
+                <button type="button" onclick="openReport('package')" class="w-full soft-card px-3 py-3 text-left card-hover flex gap-3 items-center">
+                  <span class="text-lg">📦</span>
+                  <span class="min-w-0"><span class="block font-semibold text-sm" data-i18n="repPackage">Package Wise</span>
+                  <span class="block text-[11px] text-slate-500">Plan count · Expected billing</span></span>
+                </button>
+                <button type="button" onclick="openReport('payMode')" class="w-full soft-card px-3 py-3 text-left card-hover flex gap-3 items-center">
+                  <span class="text-lg">💳</span>
+                  <span class="min-w-0"><span class="block font-semibold text-sm" data-i18n="repPayMode">Payment Mode</span>
+                  <span class="block text-[11px] text-slate-500">Cash · UPI · Online · Office</span></span>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <div class="text-[10px] font-semibold tracking-wider text-slate-400 uppercase mb-1.5 px-0.5">🔐 <span data-i18n="secAudit">Audit</span></div>
+              <div class="space-y-2">
+                <button type="button" onclick="openReport('colAudit')" class="w-full soft-card px-3 py-3 text-left card-hover flex gap-3 items-center">
+                  <span class="text-lg">🧾</span>
+                  <span class="min-w-0"><span class="block font-semibold text-sm" data-i18n="repColAudit">Collection Audit</span>
+                  <span class="block text-[11px] text-slate-500">Collector totals · mode split</span></span>
+                </button>
+                <button type="button" onclick="openReport('activity')" class="w-full soft-card px-3 py-3 text-left card-hover flex gap-3 items-center">
+                  <span class="text-lg">📜</span>
+                  <span class="min-w-0"><span class="block font-semibold text-sm" data-i18n="repActivity">Activity Log</span>
+                  <span class="block text-[11px] text-slate-500">Who changed what</span></span>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <div class="text-[10px] font-semibold tracking-wider text-slate-400 uppercase mb-1.5 px-0.5">💸 Finance</div>
+              <div class="space-y-2">
+                <button type="button" onclick="openReport('expense')" class="w-full soft-card px-3 py-3 text-left card-hover flex gap-3 items-center">
+                  <span class="text-lg">🧾</span>
+                  <span class="min-w-0"><span class="block font-semibold text-sm">Expense Report</span>
+                  <span class="block text-[11px] text-slate-500">Category · Date · Print</span></span>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <div class="text-[10px] font-semibold tracking-wider text-slate-400 uppercase mb-1.5 px-0.5">📈 <span data-i18n="secAnalytics">Analytics</span></div>
+              <div class="space-y-2">
+                <button type="button" onclick="openReport('trend')" class="w-full soft-card px-3 py-3 text-left card-hover flex gap-3 items-center">
+                  <span class="text-lg">📈</span>
+                  <span class="min-w-0"><span class="block font-semibold text-sm" data-i18n="repTrend">Collection Trend</span>
+                  <span class="block text-[11px] text-slate-500">Day-wise trend · comparison</span></span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Collection report panel -->
+          <div id="reportPanel-collection" class="report-panel hidden">
+            
+            <div class="soft-card p-4 mb-4 no-print">
+              <h3 class="font-semibold text-sm text-slate-800 mb-1">Collectors Print Out</h3>
+                            <div class="flex flex-wrap gap-2 items-end">
+                <div>
+                  <label class="text-[10px] text-slate-500">Area</label>
+                  <select id="colRepArea" onchange="renderCollectionReport()" class="block px-3 py-2 border rounded-lg text-sm bg-white">
+                    <option value="AREA 1">AREA 1</option>
+                    <option value="AREA 2">AREA 2</option>
+                  </select>
+                </div>
+                <button type="button" onclick="renderCollectionReport()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm">Refresh</button>
+                <button type="button" onclick="printCollectionReport()" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm">🖨 Print A4</button>
+              </div>
+              <div class="mt-2 text-xs text-slate-500" id="colRepSummary">—</div>
+            </div>
+            <div id="colRepPrint" class="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 text-slate-900">
+              <div class="text-center text-slate-400 text-sm py-8">Area select → Refresh</div>
+            </div>
+          </div>
+
+          <!-- Customer list panel -->
+                              <div id="reportPanel-transfer" class="report-panel hidden">
+            
+            <div class="soft-card p-4 mb-4 no-print">
+              <h3 class="font-semibold text-sm text-slate-800 mb-1">Transfer Report</h3>
+                            <div class="flex flex-wrap gap-2 items-end">
+                <div>
+                  <label class="text-[10px] text-slate-500">From</label>
+                  <input type="date" id="trRepFrom" class="block px-3 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500">To</label>
+                  <input type="date" id="trRepTo" class="block px-3 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500">Area</label>
+                  <select id="trRepPlace" class="block px-3 py-2 border rounded-lg text-sm bg-white">
+                    <option value="">All</option>
+                    <option value="AREA 1">AREA 1</option>
+                    <option value="AREA 2">AREA 2</option>
+                  </select>
+                </div>
+                <select id="trRepType" class="px-2 py-2 border rounded-lg text-sm bg-white">
+                  <option value="ALL">All Types</option>
+                  <option value="AREA">Area Change</option>
+                  <option value="STREET">Street Only</option>
+                </select>
+                <button type="button" onclick="renderTransferReport()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm">Show</button>
+                <button type="button" onclick="printDiv('trRepPrintArea')" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm">🖨 Print</button>
+              </div>
+              <div class="mt-2 text-xs text-slate-500" id="trRepSummary">—</div>
+            </div>
+            <div id="trRepPrintArea">
+              <div id="trRepBody" class="bg-white rounded-xl border overflow-hidden text-sm"></div>
+            </div>
+          </div>
+
+<div id="reportPanel-agentDay" class="report-panel hidden">
+            
+            <div class="soft-card p-4 mb-4 no-print">
+              <h3 class="font-semibold text-sm text-slate-800 mb-1">Collection Report</h3>
+                            <div class="grid grid-cols-2 gap-2 items-end">
+                <div>
+                  <label class="text-[10px] text-slate-500">From</label>
+                  <input type="date" id="agentRepFrom" class="w-full px-2 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500">To</label>
+                  <input type="date" id="agentRepTo" class="w-full px-2 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500">Agent</label>
+                  <select id="agentRepWho" onchange="renderAgentDayReport()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white">
+                    <option value="ALL">All</option>
+                    <option value="uma">UMA</option>
+                    <option value="muthumari">MUTHUMARI</option>
+                    <option value="office">OFFICE</option>
+                    <option value="online">ONLINE</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500">Area</label>
+                  <select id="agentRepArea" onchange="renderAgentDayReport()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white">
+                    <option value="ALL">All Areas</option>
+                    <option value="AREA 1">AREA 1</option>
+                    <option value="AREA 2">AREA 2</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500">MSO</label>
+                  <select id="agentRepMso" onchange="renderAgentDayReport()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white">
+                    <option value="ALL">All MSO</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500">Group</label>
+                  <select id="agentRepGroup" onchange="renderAgentDayReport()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white">
+                    <option value="date">By Date</option>
+                    <option value="area">By Area</option>
+                    <option value="mso">By MSO</option>
+                  </select>
+                </div>
+                <div class="flex gap-2 flex-wrap">
+                  <button type="button" onclick="renderAgentDayReport()" class="flex-1 bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm">Show</button>
+                  <button type="button" onclick="printDiv('agentRepPrintArea')" class="bg-slate-800 text-white px-3 py-2 rounded-lg text-sm">🖨</button>
+                  <button type="button" onclick="whatsappTodayCollections()" class="bg-green-600 text-white px-3 py-2 rounded-lg text-sm" title="Laptop WhatsApp Web">💬 Today payments</button>
+                </div>
+              </div>
+              <div class="mt-3 grid grid-cols-2 gap-2">
+                <div class="bg-slate-50 rounded-lg p-2 text-center">
+                  <div class="text-[10px] text-slate-400">Bills</div>
+                  <div class="text-lg font-bold" id="agentRepCnt">0</div>
+                </div>
+                <div class="bg-slate-50 rounded-lg p-2 text-center">
+                  <div class="text-[10px] text-slate-400">Amount</div>
+                  <div class="text-lg font-bold text-emerald-600" id="agentRepAmt">₹0</div>
+                </div>
+              </div>
+              <div class="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-1.5" id="agentRepSplit"></div>
+                          </div>
+            <div id="agentRepPrintArea">
+            <div class="px-3 py-2 text-center hidden print:block" id="agentRepPrintHead"></div>
+            <div id="agentRepBody" class="bg-white rounded-xl border overflow-hidden text-sm"></div>
+          </div>
+          </div>
+
+<div id="reportPanel-customers" class="report-panel hidden">
+            
+            <div class="no-print space-y-3 mb-3">
+              <div class="grid grid-cols-2 gap-2" id="custRepStats"></div>
+              <input type="search" id="custRepSearch" oninput="renderCustomerReport()" placeholder="Search name / mobile / box / ID"
+                class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white">
+              <div class="flex flex-wrap gap-1.5">
+                <button type="button" data-chip="" onclick="setCustRepChip(this)" class="cust-chip px-3 py-1.5 rounded-full text-xs bg-indigo-600 text-white">All</button>
+                <button type="button" data-chip="ACT" onclick="setCustRepChip(this)" class="cust-chip px-3 py-1.5 rounded-full text-xs bg-white border border-slate-200 text-slate-600">Active</button>
+                <button type="button" data-chip="DUE" onclick="setCustRepChip(this)" class="cust-chip px-3 py-1.5 rounded-full text-xs bg-white border border-slate-200 text-slate-600">Due</button>
+                <button type="button" data-chip="DC" onclick="setCustRepChip(this)" class="cust-chip px-3 py-1.5 rounded-full text-xs bg-white border border-slate-200 text-slate-600">DC</button>
+              </div>
+              <div class="flex flex-wrap gap-2 items-center">
+                <select id="custRepArea" onchange="onCustRepAreaChange()" class="px-2 py-1.5 border rounded-lg text-xs bg-white">
+                  <option value="">All Areas</option>
+                  <option value="AREA 1">AREA 1</option>
+                  <option value="AREA 2">AREA 2</option>
+                </select>
+                <select id="custRepStreet" onchange="renderCustomerReport()" class="px-2 py-1.5 border rounded-lg text-xs bg-white max-w-[140px]">
+                  <option value="">All Streets</option>
+                </select>
+                <select id="custRepSort" onchange="renderCustomerReport()" class="px-2 py-1.5 border rounded-lg text-xs bg-white">
+                  <option value="id">Sort: ID</option>
+                  <option value="name">Name A–Z</option>
+                  <option value="dueHigh">Due High → Low</option>
+                  <option value="dueLow">Due Low → High</option>
+                </select>
+                <button type="button" onclick="printDiv('custRepBody')" class="ml-auto bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs">🖨 Print</button>
+              </div>
+              <input type="hidden" id="custRepStatus" value="">
+              <div class="text-xs text-slate-500" id="custRepSummary"></div>
+            </div>
+            <div id="custRepBody" class="space-y-2"></div>
+          </div>
+
+          <!-- DC panel -->
+          <div id="reportPanel-dc" class="report-panel hidden">
+            
+            <div class="soft-card p-3 mb-3 no-print space-y-2">
+              <div class="flex items-center justify-between">
+                <h3 class="font-semibold text-sm">🔌 Disconnection Report</h3>
+                <button type="button" onclick="printDiv('dcRepBody')" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs">🖨 Print</button>
+              </div>
+              <div id="dcRepKpis" class="grid grid-cols-4 gap-1.5"></div>
+              <input type="search" id="dcRepSearch" oninput="renderDcReport()" placeholder="Search name / ID / box / mobile" class="w-full px-3 py-2 border rounded-xl text-sm">
+              <div class="flex flex-wrap gap-1.5">
+                <button type="button" data-dcchip="ALL" onclick="setDcChip(this)" class="dc-chip px-2.5 py-1 rounded-full text-xs bg-indigo-600 text-white">All DC</button>
+                <button type="button" data-dcchip="MONTH" onclick="setDcChip(this)" class="dc-chip px-2.5 py-1 rounded-full text-xs bg-white border border-slate-200">This Month</button>
+                <button type="button" data-dcchip="DUE" onclick="setDcChip(this)" class="dc-chip px-2.5 py-1 rounded-full text-xs bg-white border border-slate-200">With Due</button>
+                <button type="button" data-dcchip="NODUE" onclick="setDcChip(this)" class="dc-chip px-2.5 py-1 rounded-full text-xs bg-white border border-slate-200">No Due</button>
+              </div>
+              <input type="hidden" id="dcRepChip" value="ALL">
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[10px] text-slate-500">Area</label>
+                  <select id="dcRepArea" onchange="onDcRepAreaChange()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white">
+                    <option value="ALL">All Areas</option>
+                    <option value="AREA 1">AREA 1</option>
+                    <option value="AREA 2">AREA 2</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500">Street</label>
+                  <select id="dcRepStreet" onchange="renderDcReport()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white">
+                    <option value="ALL">All Streets</option>
+                  </select>
+                </div>
+                <div class="col-span-2">
+                  <label class="text-[10px] text-slate-500">Reason</label>
+                  <select id="dcRepReason" onchange="renderDcReport()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white">
+                    <option value="ALL">All Reasons</option>
+                    <option value="Payment Pending">Payment Pending</option>
+                    <option value="Customer Request">Customer Request</option>
+                    <option value="Temporary DC">Temporary DC</option>
+                    <option value="Shifted">Shifted</option>
+                    <option value="Service Issue">Service Issue</option>
+                    <option value="Other">Other</option>
+                    <option value="—">No Reason</option>
+                  </select>
+                </div>
+              </div>
+              <div class="text-xs text-slate-500" id="dcRepSummary"></div>
+            </div>
+            <div id="dcRepBody" class="space-y-2 text-sm pb-6"></div>
+          </div>
+
+          <!-- Package panel -->
+          <div id="reportPanel-package" class="report-panel hidden">
+            
+            <div class="soft-card p-3 mb-3 no-print space-y-2">
+              <div class="flex flex-wrap gap-2 items-center justify-between">
+                <h3 class="font-semibold text-sm">Package Wise</h3>
+                <button type="button" onclick="printDiv('pkgRepBody')" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs">🖨 Print</button>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[10px] text-slate-500">Status</label>
+                  <select id="pkgRepStatus" onchange="renderPackageReport()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white">
+                    <option value="ACT">Active</option>
+                    <option value="DC">DC</option>
+                    <option value="ALL">All</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500">Area</label>
+                  <select id="pkgRepArea" onchange="onPkgRepAreaChange()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white">
+                    <option value="ALL">All Areas</option>
+                    <option value="AREA 1">AREA 1</option>
+                    <option value="AREA 2">AREA 2</option>
+                  </select>
+                </div>
+                <div class="col-span-2">
+                  <label class="text-[10px] text-slate-500">Street</label>
+                  <select id="pkgRepStreet" onchange="renderPackageReport()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white">
+                    <option value="ALL">All Streets</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div id="pkgRepBody" class="space-y-3 text-sm"></div>
+          </div>
+        </div>
+
+
+        <!-- CANCELLED BILLS -->
+        <div id="page-cancelled" class="page hidden fade-in">
+          <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <div class="px-4 py-3 border-b font-semibold text-sm">Cancelled Bills</div>
+            <div class="overflow-x-auto max-h-[70vh] overflow-y-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-slate-50 sticky top-0">
+                  <tr>
+                    <th class="text-left px-3 py-2">Bill No</th>
+                    <th class="text-left px-3 py-2">Date</th>
+                    <th class="text-left px-3 py-2">Customer</th>
+                    <th class="text-left px-3 py-2">Amount</th>
+                    <th class="text-left px-3 py-2">Collected By</th>
+                    <th class="text-left px-3 py-2">Cancelled By</th>
+                    <th class="text-left px-3 py-2">Reason</th>
+                  </tr>
+                </thead>
+                <tbody id="cancelledBillsBody">
+                  <tr><td colspan="6" class="text-center py-6 text-slate-400">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- MASTERS -->
+        <div id="page-masters" class="page hidden fade-in">
+          <div id="mastersHub" class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+            <button type="button" onclick="showMasterPanel('street')" class="bg-white rounded-xl p-4 shadow-sm border text-center hover:shadow-md">
+              <div class="text-2xl mb-1">🛣️</div><div class="font-medium text-sm">Street</div>
+            </button>
+            <button type="button" onclick="showMasterPanel('package')" class="bg-white rounded-xl p-4 shadow-sm border text-center hover:shadow-md">
+              <div class="text-2xl mb-1">📦</div><div class="font-medium text-sm">Package</div>
+            </button>
+            <button type="button" onclick="showMasterPanel('mso')" class="bg-white rounded-xl p-4 shadow-sm border text-center hover:shadow-md">
+              <div class="text-2xl mb-1">📡</div><div class="font-medium text-sm">MSO</div>
+            </button>
+            <button type="button" onclick="showMasterPanel('place')" class="bg-white rounded-xl p-4 shadow-sm border text-center hover:shadow-md">
+              <div class="text-2xl mb-1">📍</div><div class="font-medium text-sm">Place / Area</div>
+            </button>
+            <button type="button" onclick="showMasterPanel('company')" class="bg-white rounded-xl p-4 shadow-sm border text-center hover:shadow-md">
+              <div class="text-2xl mb-1">🏢</div><div class="font-medium text-sm">Company Info</div>
+            </button>
+            <button type="button" onclick="showMasterPanel('employee')" class="bg-white rounded-xl p-4 shadow-sm border text-center hover:shadow-md">
+              <div class="text-2xl mb-1">👤</div><div class="font-medium text-sm">Employee / Area</div>
+            </button>
+          </div>
+
+          <!-- STREET PANEL -->
+          <div id="masterPanel-street" class="master-panel hidden">
+            <button type="button" onclick="showMasterPanel(null)" class="text-sm text-blue-600 mb-2">← Back</button>
+            <div class="bg-white rounded-xl shadow-sm border p-4 mb-4">
+              <h3 class="font-semibold mb-3 text-sm">Street Master</h3>
+              <input type="hidden" id="editStreetDocId" value="">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                <div>
+                  <label class="text-xs text-slate-500">Place</label>
+                  <select id="mstPlace" onchange="filterStreetMaster(this.value)" class="w-full px-3 py-2 border rounded-lg bg-white">
+                    <option value="AREA 1">AREA 1</option>
+                    <option value="AREA 2">AREA 2</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs text-slate-500">Street</label>
+                  <input type="text" id="mstStreet" class="w-full px-3 py-2 border rounded-lg">
+                </div>
+                <div>
+                  <label class="text-xs text-slate-500">Street ID</label>
+                  <input type="text" id="mstStreetId" class="w-full px-3 py-2 border rounded-lg font-mono">
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-2 mt-3">
+                <button type="button" onclick="saveStreetMaster()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm">Save</button>
+                <button type="button" onclick="clearStreetForm()" class="bg-slate-200 px-4 py-2 rounded-lg text-sm">Clear</button>
+                
+              </div>
+            </div>
+            <div class="bg-white rounded-xl border overflow-hidden">
+              <div class="px-3 py-2 bg-slate-50 border-b flex gap-2 text-sm">
+                <button type="button" onclick="filterStreetMaster('ALL')" id="stFilterAll" class="px-3 py-1 rounded-lg bg-slate-200 font-medium">All</button>
+                <button type="button" onclick="filterStreetMaster('AREA 1')" id="stFilter1" class="px-3 py-1 rounded-lg hover:bg-slate-100">AREA 1</button>
+                <button type="button" onclick="filterStreetMaster('AREA 2')" id="stFilter2" class="px-3 py-1 rounded-lg hover:bg-slate-100">AREA 2</button>
+              </div>
+              <div class="overflow-x-auto max-h-80 overflow-y-auto">
+                <table class="w-full text-sm"><thead class="bg-slate-50 sticky top-0"><tr>
+                  <th class="text-left px-3 py-2">Place</th><th class="text-left px-3 py-2">Street</th><th class="text-left px-3 py-2">ID</th><th class="text-left px-3 py-2">Action</th>
+                </tr></thead><tbody id="streetMasterBody"></tbody></table>
+              </div>
+            </div>
+          </div>
+
+          <!-- PACKAGE PANEL -->
+          <div id="masterPanel-package" class="master-panel hidden">
+            <button type="button" onclick="showMasterPanel(null)" class="text-sm text-blue-600 mb-2">← Back</button>
+            <div class="bg-white rounded-xl border p-4 mb-4">
+              <h3 class="font-semibold mb-3 text-sm">Package Master</h3>
+              <input type="hidden" id="editPkgDocId" value="">
+              <div class="flex flex-col sm:flex-row gap-2">
+                <input type="text" id="mstPkgName" placeholder="PLAN 300" class="flex-1 px-3 py-2 border rounded-lg text-sm">
+                <input type="number" id="mstPkgAmt" placeholder="Amount" class="w-28 px-3 py-2 border rounded-lg text-sm">
+                <button type="button" onclick="savePackageMaster()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm">Save</button>
+                <button type="button" onclick="seedPackages()" class="text-xs text-blue-600">Import 100–600</button>
+              </div>
+            </div>
+            <div class="bg-white rounded-xl border overflow-hidden max-h-80 overflow-y-auto">
+              <table class="w-full text-sm"><thead class="bg-slate-50 sticky top-0"><tr>
+                <th class="text-left px-3 py-2">Package</th><th class="text-left px-3 py-2">Amount</th><th class="text-left px-3 py-2">Action</th>
+              </tr></thead><tbody id="packageMasterBody"></tbody></table>
+            </div>
+          </div>
+
+          <!-- MSO PANEL -->
+          <div id="masterPanel-mso" class="master-panel hidden">
+            <button type="button" onclick="showMasterPanel(null)" class="text-sm text-blue-600 mb-2">← Back</button>
+            <div class="bg-white rounded-xl border p-4 mb-4">
+              <h3 class="font-semibold mb-3 text-sm">MSO Master</h3>
+              <input type="hidden" id="editMsoDocId" value="">
+              <div class="flex gap-2">
+                <input type="text" id="mstMsoName" placeholder="MSO code / name" class="flex-1 px-3 py-2 border rounded-lg text-sm">
+                <button type="button" onclick="saveMsoMaster()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm">Save</button>
+                <button type="button" onclick="seedMso()" class="text-xs text-blue-600">Import default</button>
+              </div>
+            </div>
+            <div class="bg-white rounded-xl border overflow-hidden">
+              <table class="w-full text-sm"><thead class="bg-slate-50"><tr>
+                <th class="text-left px-3 py-2">MSO</th><th class="text-left px-3 py-2">Action</th>
+              </tr></thead><tbody id="msoMasterBody"></tbody></table>
+            </div>
+          </div>
+
+          <!-- PLACE PANEL -->
+          <div id="masterPanel-place" class="master-panel hidden">
+            <button type="button" onclick="showMasterPanel(null)" class="text-sm text-blue-600 mb-2">← Back</button>
+            <div class="bg-white rounded-xl border p-4">
+              <h3 class="font-semibold mb-2 text-sm">Place / Area</h3>
+                            <ul class="text-sm space-y-1">
+                <li class="px-3 py-2 bg-slate-50 rounded-lg">AREA 1</li>
+                <li class="px-3 py-2 bg-slate-50 rounded-lg">AREA 2</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- COMPANY PANEL -->
+          <div id="masterPanel-company" class="master-panel hidden">
+            <button type="button" onclick="showMasterPanel(null)" class="text-sm text-blue-600 mb-2">← Back</button>
+            <div class="bg-white rounded-xl border p-4 max-w-lg">
+              <h3 class="font-semibold mb-3 text-sm">Company Info</h3>
+              <div class="space-y-2 text-sm" id="companyForm">
+                <label class="text-xs text-slate-500">Company</label>
+                <input type="text" id="coName" readonly class="co-field w-full px-3 py-2 border rounded-lg bg-slate-50 text-slate-800">
+                <label class="text-xs text-slate-500">Address</label>
+                <input type="text" id="coAddress" readonly class="co-field w-full px-3 py-2 border rounded-lg bg-slate-50 text-slate-800">
+                <label class="text-xs text-slate-500">Office / Complaint</label>
+                <input type="text" id="coPhone" readonly class="co-field w-full px-3 py-2 border rounded-lg bg-slate-50 text-slate-800">
+                <input type="text" id="coPhone2" readonly class="co-field w-full px-3 py-2 border rounded-lg bg-slate-50 text-slate-800">
+                <label class="text-xs text-slate-500">GPay only (no complaint)</label>
+                <input type="text" id="coGpay" readonly class="co-field w-full px-3 py-2 border rounded-lg bg-slate-50 text-slate-800">
+                <div class="flex gap-2 pt-1">
+                  <button type="button" id="coEditBtn" onclick="setCompanyEditMode(true)" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm">Edit</button>
+                  <button type="button" id="coSaveBtn" onclick="saveCompanyInfo()" class="hidden bg-blue-600 text-white px-4 py-2 rounded-lg text-sm">Save</button>
+                  <button type="button" id="coCancelBtn" onclick="setCompanyEditMode(false)" class="hidden bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm">Cancel</button>
+                </div>
+                <p id="coSavedMsg" class="hidden text-xs text-emerald-600 font-medium">✓ Saved</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- EMPLOYEE PANEL -->
+          <div id="masterPanel-employee" class="master-panel hidden">
+            <button type="button" onclick="showMasterPanel(null)" class="text-sm text-blue-600 mb-2">← Back</button>
+            <div class="bg-white rounded-xl border p-4 mb-4">
+              <h3 class="font-semibold mb-2 text-sm">Add / Edit Collector</h3>
+              <input type="hidden" id="editEmpId" value="">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm mb-2">
+                <div>
+                  <label class="text-xs text-slate-500">Name *</label>
+                  <input type="text" id="empName" placeholder="Uma / Muthumari" class="w-full px-3 py-2 border rounded-lg">
+                </div>
+                <div>
+                  <label class="text-xs text-slate-500">Login Email *</label>
+                  <input type="email" id="empEmail" placeholder="name@jsvcable.com" class="w-full px-3 py-2 border rounded-lg">
+                </div>
+                <div>
+                  <label class="text-xs text-slate-500">Password <span class="text-slate-400">(புதிய user-க்கு *)</span></label>
+                  <input type="text" id="empPassword" placeholder="குறைந்தது 6 எழுத்து" class="w-full px-3 py-2 border rounded-lg" autocomplete="new-password">
+                </div>
+                <div>
+                  <label class="text-xs text-slate-500">Area *</label>
+                  <select id="empArea" class="w-full px-3 py-2 border rounded-lg bg-white">
+                    <option value="AREA 1">AREA 1</option>
+                    <option value="AREA 2">AREA 2</option>
+                    <option value="ALL">ALL (Office / Online)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs text-slate-500">Role</label>
+                  <select id="empRole" class="w-full px-3 py-2 border rounded-lg bg-white">
+                    <option value="collector">Collector</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button type="button" onclick="saveEmployee()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm">Save</button>
+                <button type="button" onclick="clearEmpForm()" class="bg-slate-200 px-4 py-2 rounded-lg text-sm">Clear</button>
+              </div>
+                          </div>
+            <div class="bg-white rounded-xl border overflow-hidden">
+              <div class="px-3 py-2 bg-slate-50 text-xs font-medium text-slate-600 border-b">Collectors list</div>
+              <div id="empList" class="divide-y text-sm">
+                <div class="p-3 text-slate-400 text-center">Loading...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- EXPENSES -->
+        <div id="page-expenses" class="page hidden fade-in">
+          <div class="grid grid-cols-2 gap-3 mb-3 max-w-lg">
+            <div class="soft-card p-3 text-center">
+              <div class="text-[10px] text-slate-500 uppercase tracking-wide">Today</div>
+              <div class="text-lg font-bold text-rose-600" id="expTodayTotal">₹0</div>
+            </div>
+            <div class="soft-card p-3 text-center">
+              <div class="text-[10px] text-slate-500 uppercase tracking-wide">This Month</div>
+              <div class="text-lg font-bold text-slate-800" id="expMonthTotal">₹0</div>
+            </div>
+          </div>
+
+          <div class="soft-card p-3 mb-3 max-w-lg" id="expBreakdownCard">
+            <div class="text-xs font-semibold text-slate-600 mb-2">Expense Breakdown</div>
+            <div id="expBreakdown" class="space-y-1.5 text-sm"></div>
+          </div>
+
+          <div class="soft-card p-4 mb-4 max-w-lg">
+            <h3 class="font-semibold text-sm mb-3">+ Add Expense</h3>
+            <div class="space-y-2 text-sm">
+              <div>
+                <label class="text-[10px] text-slate-500">Date</label>
+                <input type="date" id="expDate" readonly class="w-full px-3 py-2 border rounded-lg bg-slate-100">
+              </div>
+              <div>
+                <label class="text-[10px] text-slate-500">Category</label>
+                <select id="expCategory" onchange="onExpCategoryChange()" class="w-full px-3 py-2 border rounded-lg bg-white">
+                  <option value="Daily Salary">Daily Salary</option>
+                  <option value="Tea / Coffee">Tea / Coffee</option>
+                  <option value="Petrol">Petrol</option>
+                  <option value="Spacing">Spacing</option>
+                  <option value="Donation">Donation + (name)</option>
+                  <option value="Spare Parts">Spare Parts</option>
+                  <option value="Monthly Salary">Monthly Salary + (name)</option>
+                  <option value="MSO / Broadcaster">MSO / Broadcaster</option>
+                  <option value="Electricity">Electricity</option>
+                  <option value="Cable Material">Cable Material</option>
+                  <option value="Internet">Internet</option>
+                  <option value="Office">Office</option>
+                  <option value="Transport">Transport</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div id="expNameWrap" class="hidden">
+                <label class="text-[10px] text-slate-500">Name (Donation / Monthly Salary)</label>
+                <input type="text" id="expPersonName" placeholder="Name" class="w-full px-3 py-2 border rounded-lg">
+              </div>
+              <div>
+                <label class="text-[10px] text-slate-500">Amount ₹</label>
+                <input type="number" id="expAmount" placeholder="0" class="w-full px-3 py-2 border rounded-lg">
+              </div>
+              <div>
+                <label class="text-[10px] text-slate-500">Payment Mode</label>
+                <select id="expMode" class="w-full px-3 py-2 border rounded-lg bg-white">
+                  <option value="Cash">Cash</option>
+                  <option value="UPI">UPI</option>
+                  <option value="Bank">Bank</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-[10px] text-slate-500">Note (optional)</label>
+                <input type="text" id="expNote" placeholder="EB bill / remark" class="w-full px-3 py-2 border rounded-lg">
+              </div>
+              <button type="button" onclick="saveExpense()" class="w-full bg-rose-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium">Save Expense</button>
+            </div>
+          </div>
+
+          <div class="soft-card p-4 max-w-lg">
+            <div class="flex flex-wrap gap-2 mb-3 items-center">
+              <select id="expFilterRange" onchange="onExpFilterChange()" class="px-2 py-1.5 border rounded-lg text-xs bg-white">
+                <option value="month">This Month</option>
+                <option value="today">Today</option>
+                <option value="week">This Week</option>
+                <option value="custom">Custom</option>
+              </select>
+              <select id="expFilterCat" onchange="loadExpenses()" class="px-2 py-1.5 border rounded-lg text-xs bg-white">
+                <option value="">All Categories</option>
+              </select>
+              <div id="expCustomDates" class="hidden flex gap-1 items-center">
+                <input type="date" id="expFrom" class="px-1 py-1 border rounded text-xs" onchange="loadExpenses()">
+                <span class="text-xs text-slate-400">→</span>
+                <input type="date" id="expTo" class="px-1 py-1 border rounded text-xs" onchange="loadExpenses()">
+              </div>
+            </div>
+            <div class="text-xs text-slate-500 mb-2" id="expFilterTotal">—</div>
+            <h3 class="font-semibold text-sm mb-2">Recent Expenses</h3>
+            <div id="expList" class="text-sm divide-y max-h-[50vh] overflow-y-auto"></div>
+          </div>
+        </div>
+
+        
+        
+          <div id="reportPanel-colSummary" class="report-panel hidden">
+            
+            <div class="soft-card p-4 mb-3 no-print">
+              <h3 class="font-semibold text-sm">Collection Report</h3>
+              <p class="text-xs text-slate-500" id="colSumRange">—</p>
+              <button type="button" onclick="renderColSummaryReport()" class="mt-2 bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm">Refresh</button>
+              <button type="button" onclick="printDiv('colSumBody')" class="mt-2 bg-slate-800 text-white px-3 py-1.5 rounded-lg text-sm">🖨 Print</button>
+            </div>
+            <div id="colSumBody" class="space-y-3"></div>
+          </div>
+          <div id="reportPanel-newConn" class="report-panel hidden">
+            
+            <div class="soft-card p-4 mb-3 no-print space-y-2">
+              <h3 class="font-semibold text-sm">New Connection Report</h3>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[10px] text-slate-500">From</label>
+                  <input type="date" id="newConnFrom" class="w-full px-2 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500">To</label>
+                  <input type="date" id="newConnTo" class="w-full px-2 py-2 border rounded-lg text-sm">
+                </div>
+                <div class="col-span-2">
+                  <label class="text-[10px] text-slate-500">Area</label>
+                  <select id="newConnArea" onchange="renderNewConnReport()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white">
+                    <option value="ALL">All Areas</option>
+                    <option value="AREA 1">AREA 1</option>
+                    <option value="AREA 2">AREA 2</option>
+                  </select>
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-2 items-center">
+                <button type="button" onclick="renderNewConnReport()" class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm">Show</button>
+                <button type="button" onclick="printDiv('newConnBody')" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-sm">🖨 Print</button>
+                <span class="text-xs text-slate-500" id="newConnSummary"></span>
+              </div>
+            </div>
+            <div id="newConnBody" class="bg-white rounded-xl border overflow-hidden"></div>
+          </div>
+          <div id="reportPanel-payMode" class="report-panel hidden">
+            
+            <div class="soft-card p-4 mb-3 no-print space-y-2">
+              <h3 class="font-semibold text-sm">Payment Mode Report</h3>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[10px] text-slate-500">From</label>
+                  <input type="date" id="payModeFrom" class="w-full px-2 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500">To</label>
+                  <input type="date" id="payModeTo" class="w-full px-2 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500">Area</label>
+                  <select id="payModeArea" onchange="onPayModeAreaChange()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white">
+                    <option value="ALL">All Areas</option>
+                    <option value="AREA 1">AREA 1</option>
+                    <option value="AREA 2">AREA 2</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500">Street</label>
+                  <select id="payModeStreet" class="w-full px-2 py-2 border rounded-lg text-sm bg-white">
+                    <option value="ALL">All Streets</option>
+                  </select>
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-2 items-center">
+                <button type="button" onclick="setPayModePreset('this')" class="px-2.5 py-1 rounded-full text-xs bg-white border border-slate-200">This Month</button>
+                <button type="button" onclick="setPayModePreset('last')" class="px-2.5 py-1 rounded-full text-xs bg-white border border-slate-200">Last Month</button>
+                <button type="button" onclick="renderPayModeReport()" class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm">Show</button>
+                <button type="button" onclick="printDiv('payModeBody')" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-sm">🖨</button>
+                <span class="text-xs text-slate-500" id="payModeSummary"></span>
+              </div>
+            </div>
+            <div id="payModeBody" class="space-y-2"></div>
+          </div>
+          <div id="reportPanel-activity" class="report-panel hidden">
+            
+            <div class="soft-card p-3 mb-3 no-print space-y-2">
+              <div class="flex items-center justify-between">
+                <h3 class="font-semibold text-sm">Activity Log</h3>
+                <button type="button" onclick="renderActivityReport()" class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs">Refresh</button>
+              </div>
+              <input type="search" id="actSearch" oninput="renderActivityReport()" placeholder="Search name / action / user" class="w-full px-3 py-2 border rounded-xl text-sm">
+              <div class="flex flex-wrap gap-1.5">
+                <button type="button" onclick="setActFilter('ALL', this)" class="act-chip px-2.5 py-1 rounded-full text-xs bg-indigo-600 text-white">All</button>
+                <button type="button" onclick="setActFilter('payment', this)" class="act-chip px-2.5 py-1 rounded-full text-xs bg-white border border-slate-200">Payments</button>
+                <button type="button" onclick="setActFilter('customer', this)" class="act-chip px-2.5 py-1 rounded-full text-xs bg-white border border-slate-200">Customer</button>
+                <button type="button" onclick="setActFilter('package', this)" class="act-chip px-2.5 py-1 rounded-full text-xs bg-white border border-slate-200">Package</button>
+                <button type="button" onclick="setActFilter('service', this)" class="act-chip px-2.5 py-1 rounded-full text-xs bg-white border border-slate-200">Service</button>
+              </div>
+              <input type="hidden" id="actFilter" value="ALL">
+            </div>
+            <div id="activityRepBody" class="max-h-[70vh] overflow-y-auto pb-6"></div>
+          </div>
+          <div id="reportPanel-colAudit" class="report-panel hidden">
+            
+            <div class="soft-card p-3 mb-3 no-print space-y-2">
+              <div class="flex items-center justify-between">
+                <h3 class="font-semibold text-sm">Collection Audit</h3>
+                <button type="button" onclick="printDiv('colAuditBody')" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs">🖨 Print</button>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[10px] text-slate-500">From</label>
+                  <input type="date" id="colAuditFrom" class="w-full px-2 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500">To</label>
+                  <input type="date" id="colAuditTo" class="w-full px-2 py-2 border rounded-lg text-sm">
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-1.5 items-center">
+                <button type="button" onclick="setColAuditPreset('today')" class="px-2.5 py-1 rounded-full text-xs bg-white border border-slate-200">Today</button>
+                <button type="button" onclick="setColAuditPreset('week')" class="px-2.5 py-1 rounded-full text-xs bg-white border border-slate-200">This Week</button>
+                <button type="button" onclick="setColAuditPreset('month')" class="px-2.5 py-1 rounded-full text-xs bg-white border border-slate-200">This Month</button>
+                <button type="button" onclick="renderColAuditReport()" class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm">Show</button>
+              </div>
+              <p class="text-xs text-slate-500" id="colAuditSummary"></p>
+            </div>
+            <div id="colAuditBody" class="space-y-2 pb-6"></div>
+          </div>
+          <div id="reportPanel-trend" class="report-panel hidden">
+            
+            <div class="soft-card p-3 mb-3 no-print space-y-2">
+              <div class="flex items-center justify-between">
+                <h3 class="font-semibold text-sm">Collection Trend</h3>
+                <button type="button" onclick="printDiv('trendBody')" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs">🖨</button>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[10px] text-slate-500">From</label>
+                  <input type="date" id="trendFrom" class="w-full px-2 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500">To</label>
+                  <input type="date" id="trendTo" class="w-full px-2 py-2 border rounded-lg text-sm">
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-1.5">
+                <button type="button" onclick="setTrendPreset(7)" class="px-2.5 py-1 rounded-full text-xs bg-white border border-slate-200">7 Days</button>
+                <button type="button" onclick="setTrendPreset(30)" class="px-2.5 py-1 rounded-full text-xs bg-white border border-slate-200">30 Days</button>
+                <button type="button" onclick="setTrendPreset('month')" class="px-2.5 py-1 rounded-full text-xs bg-white border border-slate-200">This Month</button>
+                <button type="button" onclick="renderTrendReport()" class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm">Show</button>
+              </div>
+            </div>
+            <div id="trendBody" class="space-y-3 pb-6"></div>
+          </div>
+
+        <!-- MONTH BILL + BACKUP -->
+        <div id="page-monthBill" class="page hidden fade-in">
+          <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 max-w-lg space-y-4">
+            <h3 class="font-semibold text-lg">Month End</h3>
+
+            <div class="border rounded-xl p-4 border-amber-200 bg-amber-50">
+              <div class="font-medium mb-1 text-amber-900">Next Month Bill Generation</div>
+                            <button type="button" onclick="generateMonthDue()" id="genDueBtn"
+                class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium w-full sm:w-auto">Generate Next Month Bill</button>
+              <p class="text-xs text-amber-800/80 mt-2 hidden" id="genDueHint"></p>
+                            <div id="genDueStatus" class="text-xs text-slate-600 mt-2"></div>
+            </div>
+
+            <div class="border rounded-xl p-4 border-emerald-200 bg-emerald-50">
+              <div class="font-medium mb-1 text-emerald-900">Monthly Backup</div>
+                            <button type="button" onclick="runFullBackup()" id="backupBtn"
+                class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium w-full sm:w-auto">
+                ⬇ Backup Now
+              </button>
+              <div id="backupStatus" class="text-xs text-slate-600 mt-2"></div>
+            </div>
+
+            <div class="border rounded-xl p-4 border-indigo-200 bg-indigo-50">
+              <div class="font-medium mb-1 text-indigo-900">Collectors Print Out</div>
+                            <button type="button" onclick="openCollectorsPrintOut()"
+                class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium w-full sm:w-auto">
+                🖨 Open Print Out
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SETTINGS -->
+        <div id="page-settings" class="page hidden fade-in">
+          <div class="max-w-lg mx-auto space-y-3 pb-8">
+            <h3 class="font-semibold text-lg px-1" data-i18n="settings">Settings</h3>
+
+            <!-- 1 Appearance -->
+            <div class="settings-acc bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <button type="button" class="settings-acc-btn w-full flex items-center justify-between px-4 py-3 text-left" onclick="toggleSettingsAcc(this)">
+                <span class="font-medium text-sm text-slate-800">🎨 <span data-i18n="appearance">Appearance</span></span>
+                <span class="settings-acc-chev text-slate-400 text-xs">▼</span>
+              </button>
+              <div class="settings-acc-body px-4 pb-4 space-y-3">
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="text-[10px] text-slate-500" data-i18n="theme">Theme</label>
+                    <select id="settingTheme" onchange="setAppTheme(this.value)" class="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+                      <option value="light">Light</option>
+                      <option value="dark">Dark</option>
+                      <option value="system">System</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="text-[10px] text-slate-500" data-i18n="language">Language</label>
+                    <select id="settingLang" onchange="setAppLang(this.value)" class="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+                      <option value="ta">தமிழ்</option>
+                      <option value="en">English</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500">Text size (A / A+)</label>
+                  <select id="settingTextSize" onchange="setAppTextSize(this.value)" class="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+                    <option value="normal">A · Normal</option>
+                    <option value="large">A+ · Large</option>
+                    <option value="xlarge">A++ · Extra large</option>
+                    <option value="xxlarge">A+++ · Senior</option>
+                  </select>
+                  <p class="text-[11px] text-slate-400 mt-1">வயதானவர்களுக்கு பெரிய எழுத்து — layout உடையாது</p>
+                </div>
+                <p class="text-[11px] text-slate-400" data-i18n="themeHint">Theme & language save on this device</p>
+              </div>
+            </div>
+
+            <!-- Dashboard Customize -->
+            <div class="settings-acc bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <button type="button" class="settings-acc-btn w-full flex items-center justify-between px-4 py-3 text-left" onclick="toggleSettingsAcc(this)">
+                <span class="font-medium text-sm text-slate-800">📊 Dashboard Customize</span>
+                <span class="settings-acc-chev text-slate-400 text-xs">▼</span>
+              </button>
+              <div class="settings-acc-body px-4 pb-4 space-y-2 hidden">
+                <p class="text-[11px] text-slate-400 mb-1">Show / hide widgets on Dashboard</p>
+                <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="dashShowExpenses" checked onchange="saveDashLayout()"> Month Expenses + Net</label>
+                <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="dashShowNetwork" checked onchange="saveDashLayout()"> Network Overview</label>
+                <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="dashShowAgents" checked onchange="saveDashLayout()"> Collection by Agent</label>
+                <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="dashShowQuick" checked onchange="saveDashLayout()"> Quick Actions</label>
+                <p class="text-[11px] text-slate-400">Saved on this device only</p>
+              </div>
+            </div>
+
+            <!-- 2 WhatsApp Templates -->
+            <div class="settings-acc bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <button type="button" class="settings-acc-btn w-full flex items-center justify-between px-4 py-3 text-left" onclick="toggleSettingsAcc(this)">
+                <span class="font-medium text-sm text-slate-800">💬 WhatsApp Templates</span>
+                <span class="settings-acc-chev text-slate-400 text-xs">▼</span>
+              </button>
+              <div class="settings-acc-body px-4 pb-4 space-y-2 hidden">
+                <select id="waTplSelect" onchange="onWaTplSelect()" class="w-full px-3 py-2 border rounded-lg text-sm bg-white"></select>
+                <input type="text" id="waTplName" placeholder="Template name" class="w-full px-3 py-2 border rounded-lg text-sm">
+                <textarea id="waTemplate" rows="8" class="w-full px-3 py-2 border rounded-lg text-sm font-mono"></textarea>
+                <div class="text-[10px] text-slate-400">Variables: {name} {month} {due} {package} {amount} {date} {promo} {gpay} {office}</div>
+                <div class="flex flex-wrap gap-2">
+                  <button type="button" onclick="saveWaTemplate()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm">Save</button>
+                  <button type="button" onclick="addWaTemplate()" class="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm">+ New</button>
+                  <button type="button" onclick="deleteWaTemplate()" class="bg-red-100 text-red-700 px-3 py-2 rounded-lg text-sm">Delete</button>
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500">Default template</label>
+                  <select id="waDefaultTpl" onchange="saveWaDefaultTpl()" class="w-full px-3 py-2 border rounded-lg text-sm bg-white"></select>
+                </div>
+                <div class="mt-3 pt-3 border-t border-slate-100">
+                  <label class="text-[10px] text-slate-500 font-semibold">📢 Promo / விளம்பரம் (Internet · OTT · IPTV)</label>
+                  <p class="text-[10px] text-slate-400 mb-1">Template-ல் {promo} இருக்கும் இடத்தில் இது paste ஆகும். Save பண்ணினால் எல்லா message-லும் வரும்.</p>
+                  <textarea id="waPromoText" rows="3" class="w-full px-3 py-2 border rounded-lg text-sm">📡 Broadband Internet  |  📺 OTT  |  📡 IPTV
+விவரம்: Office எண்ணில் அழைக்கவும்</textarea>
+                  <button type="button" onclick="saveWaPromoFromForm()" class="mt-2 bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs">Save Promo</button>
+                </div>
+                <p id="waTemplateStatus" class="text-xs text-slate-500"></p>
+              </div>
+            </div>
+
+            <!-- 3 Billing -->
+            <div class="settings-acc bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <button type="button" class="settings-acc-btn w-full flex items-center justify-between px-4 py-3 text-left" onclick="toggleSettingsAcc(this)">
+                <span class="font-medium text-sm text-slate-800">💰 Billing</span>
+                <span class="settings-acc-chev text-slate-400 text-xs">▼</span>
+              </button>
+              <div class="settings-acc-body px-4 pb-4 space-y-3 hidden">
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="text-[10px] text-slate-500">Bill prefix</label>
+                    <input type="text" id="setBillPrefix" value="SCM" class="w-full px-3 py-2 border rounded-lg text-sm" onchange="saveBillingSettings()">
+                  </div>
+                  <div>
+                    <label class="text-[10px] text-slate-500">Currency</label>
+                    <input type="text" id="setCurrency" value="₹" class="w-full px-3 py-2 border rounded-lg text-sm" onchange="saveBillingSettings()">
+                  </div>
+                  <div>
+                    <label class="text-[10px] text-slate-500">Default mode</label>
+                    <select id="setDefaultMode" class="w-full px-3 py-2 border rounded-lg text-sm bg-white" onchange="saveBillingSettings()">
+                      <option value="Cash">Cash</option>
+                      <option value="UPI">UPI</option>
+                      <option value="Online">Online</option>
+                      <option value="Office">Office</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="text-[10px] text-slate-500">Cycle</label>
+                    <select id="setBillCycle" class="w-full px-3 py-2 border rounded-lg text-sm bg-white" onchange="saveBillingSettings()">
+                      <option value="Monthly">Monthly</option>
+                    </select>
+                  </div>
+                </div>
+                <p class="text-[11px] text-slate-400">Format example: SCM-2026-00157</p>
+                <button type="button" onclick="generateMonthDue()" id="genDueBtn" class="w-full bg-amber-600 hover:bg-amber-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium">Generate Next Month Bill</button>
+                <div id="genDueStatus" class="text-xs text-slate-600"></div>
+                <p class="text-xs text-amber-800/80 hidden" id="genDueHint"></p>
+              </div>
+            </div>
+
+            <!-- 4 Receipt -->
+            <div class="settings-acc bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <button type="button" class="settings-acc-btn w-full flex items-center justify-between px-4 py-3 text-left" onclick="toggleSettingsAcc(this)">
+                <span class="font-medium text-sm text-slate-800">🧾 Receipt & Bill</span>
+                <span class="settings-acc-chev text-slate-400 text-xs">▼</span>
+              </button>
+              <div class="settings-acc-body px-4 pb-4 space-y-2 hidden">
+                <p class="text-xs text-slate-500">Company name, address, phones & GPay — edit in <button type="button" onclick="openMastersPanel('company')" class="text-indigo-600 underline">Company</button> master.</p>
+                <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="setRcptCollector" checked onchange="saveBillingSettings()"> Show collector name</label>
+                <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="setRcptMode" checked onchange="saveBillingSettings()"> Show payment mode</label>
+                <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="setRcptDue" checked onchange="saveBillingSettings()"> Show previous / current due</label>
+                <div>
+                  <label class="text-[10px] text-slate-500">Receipt footer</label>
+                  <input type="text" id="setRcptFooter" value="நன்றி · by JMR Apps" class="w-full px-3 py-2 border rounded-lg text-sm" onchange="saveBillingSettings()">
+                </div>
+              </div>
+            </div>
+
+            <!-- 5 Security -->
+            <div class="settings-acc bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <button type="button" class="settings-acc-btn w-full flex items-center justify-between px-4 py-3 text-left" onclick="toggleSettingsAcc(this)">
+                <span class="font-medium text-sm text-slate-800">🔐 Security & Permissions</span>
+                <span class="settings-acc-chev text-slate-400 text-xs">▼</span>
+              </button>
+              <div class="settings-acc-body px-4 pb-4 space-y-2 hidden">
+                <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="setPermCancelAdmin" checked onchange="saveBillingSettings()"> Cancel Bill — Admin only</label>
+                <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="setPermDeleteAdmin" checked onchange="saveBillingSettings()"> Delete Customer — Admin only</label>
+                <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="setPermExport" checked onchange="saveBillingSettings()"> Export / Backup allowed</label>
+                <p class="text-[11px] text-slate-400">Collector app already restricted (collect + view only).</p>
+              </div>
+            </div>
+
+            <!-- 6 Data & Backup -->
+            <div class="settings-acc bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <button type="button" class="settings-acc-btn w-full flex items-center justify-between px-4 py-3 text-left" onclick="toggleSettingsAcc(this)">
+                <span class="font-medium text-sm text-slate-800">💾 Data & Backup</span>
+                <span class="settings-acc-chev text-slate-400 text-xs">▼</span>
+              </button>
+              <div class="settings-acc-body px-4 pb-4 space-y-2 hidden">
+                <button type="button" onclick="runFullBackup()" id="backupBtn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium">⬇ Backup Now</button>
+                <div id="backupStatus" class="text-xs text-slate-600"></div>
+                <button type="button" onclick="openCollectorsPrintOut()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium">🖨 Collectors Print Out</button>
+              </div>
+            </div>
+
+            <!-- 7 Migration -->
+            <div class="settings-acc bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <button type="button" class="settings-acc-btn w-full flex items-center justify-between px-4 py-3 text-left" onclick="toggleSettingsAcc(this)">
+                <span class="font-medium text-sm text-slate-800">📦 Migration · CableSoft</span>
+                <span class="settings-acc-chev text-slate-400 text-xs">▼</span>
+              </button>
+              <div class="settings-acc-body px-4 pb-4 space-y-2 hidden">
+                <button type="button" onclick="importTodayCollections()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium">16 Aug Collection Import</button>
+                <button type="button" onclick="importAugustCollections()" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium">Import Collections (to 16 Aug)</button>
+                <button type="button" onclick="fixGpayLocalAgents()" class="w-full bg-amber-600 hover:bg-amber-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium">Fix GPAY→Online · LOCAL→Office</button>
+              </div>
+            </div>
+
+            <!-- 8 App Info -->
+            <div class="settings-acc bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <button type="button" class="settings-acc-btn w-full flex items-center justify-between px-4 py-3 text-left" onclick="toggleSettingsAcc(this)">
+                <span class="font-medium text-sm text-slate-800">ℹ️ App Info</span>
+                <span class="settings-acc-chev text-slate-400 text-xs">▼</span>
+              </button>
+              <div class="settings-acc-body px-4 pb-4 space-y-1 hidden">
+                <div class="text-sm font-medium text-slate-800">Smart Cable Manager</div>
+                <div class="text-sm text-slate-600">Version: 1.2</div>
+                <div class="text-sm text-slate-600">My Cable Network</div>
+                <div class="text-xs text-emerald-600 mt-1">✓ All data synced (Firebase)</div>
+                <div class="text-xs text-slate-500 mt-2">by JMR Apps</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      
+</main>
+
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  
+  
+  
+  
+          <div id="reportPanel-expense" class="report-panel hidden">
+            <div class="soft-card p-4 mb-3 no-print space-y-2 max-w-lg">
+              <h3 class="font-semibold text-sm">Expense Report</h3>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[10px] text-slate-500">From</label>
+                  <input type="date" id="expRepFrom" class="w-full px-2 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                  <label class="text-[10px] text-slate-500">To</label>
+                  <input type="date" id="expRepTo" class="w-full px-2 py-2 border rounded-lg text-sm">
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" onclick="renderExpenseReport()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm">Show</button>
+                <button type="button" onclick="printDiv('expRepPrint')" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm">🖨 Print</button>
+              </div>
+            </div>
+            <div id="expRepPrint" class="space-y-3">
+              <div id="expRepSummary" class="grid grid-cols-2 gap-2"></div>
+              <div id="expRepBreakdown" class="soft-card p-3 text-sm"></div>
+              <div id="expRepBody" class="soft-card p-3 text-sm"></div>
+            </div>
+          </div>
+
+<div id="packageModal" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl max-w-md w-full p-4 space-y-3 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center">
+        <h3 class="font-semibold text-lg">Change Package</h3>
+        <button type="button" onclick="closePackageModal()" class="text-slate-400 text-xl px-2">×</button>
+      </div>
+      <p class="text-xs text-slate-500" id="pkgModalCust">-</p>
+      <div class="bg-slate-50 rounded-lg p-3 text-sm">
+        <div class="text-[10px] text-slate-400 uppercase">Current</div>
+        <div class="font-medium" id="pkgModalCurrent">-</div>
+      </div>
+      <div>
+        <label class="text-[10px] text-slate-500">New Package *</label>
+        <select id="pkgModalSelect" onchange="onPkgModalSelect()" class="w-full px-3 py-2 border rounded-lg text-sm bg-white"></select>
+      </div>
+      <div>
+        <label class="text-[10px] text-slate-500">Package Amount ₹ *</label>
+        <input type="number" id="pkgModalAmt" class="w-full px-3 py-2 border rounded-lg text-sm" oninput="recalcPkgModalTotal()">
+      </div>
+      <div class="border rounded-xl p-3 space-y-2">
+        <div class="text-xs font-medium text-slate-600">Add-ons</div>
+        <div id="pkgModalAddonChips" class="flex flex-wrap gap-1 min-h-[24px]"></div>
+        <div class="flex gap-2">
+          <input type="text" id="pkgModalAddonName" placeholder="Channel name" class="flex-1 px-2 py-1.5 border rounded-lg text-sm">
+          <input type="number" id="pkgModalAddonAmt" placeholder="₹" class="w-20 px-2 py-1.5 border rounded-lg text-sm">
+          <button type="button" onclick="addPkgModalAddon()" class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm">+</button>
+        </div>
+      </div>
+      <div class="flex justify-between items-center bg-indigo-50 rounded-lg px-3 py-2">
+        <span class="text-sm text-indigo-800">Total</span>
+        <span class="font-bold text-indigo-900" id="pkgModalTotal">₹0</span>
+      </div>
+      <div class="flex gap-2">
+        <button type="button" onclick="closePackageModal()" class="flex-1 bg-slate-100 py-2.5 rounded-xl text-sm">Cancel</button>
+        <button type="button" onclick="savePackageModal()" class="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-medium">Save Package</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="transferModal" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl max-w-md w-full p-4 space-y-3 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center">
+        <h3 class="font-semibold text-lg">Customer Transfer</h3>
+        <button type="button" onclick="closeTransferModal()" class="text-slate-400 text-xl px-2">×</button>
+      </div>
+      <p class="text-xs text-slate-500" id="transferCustLabel">-</p>
+      <div class="text-xs bg-slate-50 rounded-lg p-2 text-slate-600">
+        <span class="text-slate-400">From:</span> <span id="transferFromStreet">-</span>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div class="col-span-2">
+          <label class="text-[10px] text-slate-500">Area *</label>
+          <select id="transferPlace" onchange="onTransferPlaceChange()" class="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+            <option value="AREA 1">AREA 1</option>
+            <option value="AREA 2">AREA 2</option>
+          </select>
+        </div>
+        <div class="col-span-2">
+          <label class="text-[10px] text-slate-500">New Street *</label>
+          <select id="transferStreet" onchange="onTransferStreetChange()" class="w-full px-3 py-2 border rounded-lg text-sm bg-white"></select>
+        </div>
+        <div class="col-span-2">
+          <label class="text-[10px] text-slate-500">New Customer ID * (edit ok)</label>
+          <input type="text" id="transferCustId" class="w-full px-3 py-2 border rounded-lg text-sm font-mono">
+                  </div>
+        <div>
+          <label class="text-[10px] text-slate-500">Door No</label>
+          <input type="text" id="transferDoor" class="w-full px-3 py-2 border rounded-lg text-sm">
+        </div>
+        <div>
+          <label class="text-[10px] text-slate-500">MSO</label>
+          <input type="text" id="transferMso" list="transferMsoList" class="w-full px-3 py-2 border rounded-lg text-sm">
+          <datalist id="transferMsoList"></datalist>
+        </div>
+        <div>
+          <label class="text-[10px] text-slate-500">Box No</label>
+          <input type="text" id="transferBox" class="w-full px-3 py-2 border rounded-lg text-sm font-mono">
+        </div>
+        <div>
+          <label class="text-[10px] text-slate-500">VC / SC</label>
+          <input type="text" id="transferSc" class="w-full px-3 py-2 border rounded-lg text-sm font-mono">
+        </div>
+      </div>
+      <div class="flex gap-2 pt-1 sticky bottom-0 bg-white">
+        <button type="button" onclick="closeTransferModal()" class="flex-1 bg-slate-100 py-2.5 rounded-xl text-sm">Cancel</button>
+        <button type="button" onclick="saveTransferModal()" class="flex-1 bg-amber-600 text-white py-2.5 rounded-xl text-sm font-medium">Save Transfer</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="receiptModal" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-sm w-full p-4">
+      <div id="receiptContent" class="receipt-sheet receipt-only"></div>
+      <div class="flex gap-2 mt-4 no-print">
+        <button type="button" onclick="printReceiptNow()" class="flex-1 bg-slate-900 text-white py-2.5 rounded-xl text-sm">Print</button>
+        <button type="button" onclick="closeReceipt()" class="flex-1 bg-slate-100 py-2.5 rounded-xl text-sm">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-xl shadow-lg text-sm hidden z-50 transition"></div>
+
+  <script src="app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('./sw.js').catch(function () {});
+    });
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "name": "Smart Cable Manager · Admin",
+  "short_name": "SCM Admin",
+  "description": "Smart Cable Manager — Admin Billing",
+  "start_url": "./index.html?source=pwa",
+  "scope": "./",
+  "id": "/smart-cable-manager/admin",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

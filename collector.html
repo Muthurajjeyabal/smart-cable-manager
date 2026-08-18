@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ta">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f4c81">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="manifest-collector.json">
+  <link rel="apple-touch-icon" href="logo.png">
+  <title>Smart Cable Manager · Collector</title>
+  <link rel="icon" href="logo.png" type="image/png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body { font-family: system-ui, -apple-system, sans-serif; background:#f1f5f9; }
+    .menu-btn:active { transform: scale(0.97); }
+    .bottom-nav { padding-bottom: env(safe-area-inset-bottom); }
+    .page-pad { padding-bottom: 72px; }
+    .progress-bar { height: 6px; background: #e2e8f0; border-radius: 99px; overflow: hidden; }
+    .progress-bar > span { display:block; height:100%; background: linear-gradient(90deg,#2563eb,#10b981); border-radius:99px; }
+    body.dark { background:#0f172a; color:#e2e8f0; }
+    body.dark .bg-white { background:#1e293b !important; }
+    body.dark .bg-slate-100 { background:#0f172a !important; }
+    body.dark .text-slate-900, body.dark .text-slate-800 { color:#f1f5f9 !important; }
+    body.dark .text-slate-700 { color:#cbd5e1 !important; }
+    body.dark .text-slate-500, body.dark .text-slate-400 { color:#94a3b8 !important; }
+    body.dark .border-slate-200, body.dark .border-slate-100 { border-color:#334155 !important; }
+    body.dark input, body.dark select { background:#0f172a; color:#e2e8f0; border-color:#475569; }
+    body.dark #bottomNav { background:#1e293b; border-color:#334155; }
+    body.dark .divide-slate-100 > * { border-color:#334155; }
+  </style>
+</head>
+<div id="splashScreen" style="position:fixed;inset:0;z-index:9999;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .5s">
+  <img src="jmr-logo.png" alt="JMR" style="width:min(50vw,180px)">
+  <div style="color:#94a3b8;font-size:10px;letter-spacing:.15em;margin-top:12px">BY JMR APPS</div>
+</div>
+<script>setTimeout(function(){var e=document.getElementById('splashScreen');if(e){e.style.opacity=0;setTimeout(function(){e.remove()},500)}},1400)</script>
+<body class="bg-slate-100 text-slate-800 min-h-screen">
+
+  <div id="loginScreen" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-emerald-900 via-green-900 to-teal-900">
+    <div class="w-full max-w-sm bg-white rounded-2xl shadow-xl p-6">
+      <div class="text-center mb-6">
+        <div class="inline-block bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full mb-3 tracking-wide">COLLECTOR APP</div>
+        <div class="w-16 h-16 bg-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3 text-white text-2xl font-bold">₹</div>
+        <img src="logo.png" alt="Smart Cable Manager" class="w-24 h-auto mx-auto mb-3"><h1 class="text-lg font-bold">Smart Cable Manager</h1><p class="text-xs text-slate-500 mb-2">Collector</p>
+        <p class="text-sm text-emerald-700 font-medium">Agent Login • Collection only</p>
+        <p class="text-xs text-slate-400 mt-1">My Cable Network</p>
+      </div>
+      <div id="loginError" class="hidden mb-3 p-2 bg-red-50 text-red-600 text-sm rounded-lg"></div>
+      <form id="loginForm" class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Collector Email</label>
+          <input type="email" id="loginEmail" required placeholder="uma@jsvcable.com" class="w-full px-4 py-3 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Password</label>
+          <input type="password" id="loginPassword" required placeholder="••••••••" class="w-full px-4 py-3 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500">
+        </div>
+        <button type="submit" id="loginBtn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl">Collector Login</button>
+      </form>
+      <p class="text-center text-xs text-slate-400 mt-4">Admin panel → separate link</p>
+    </div>
+  </div>
+
+  <div id="appScreen" class="hidden min-h-screen flex flex-col">
+    <header class="bg-blue-800 text-white px-4 py-3 sticky top-0 z-30 shadow">
+      <div class="flex items-center justify-between gap-2">
+        <button id="backBtn" onclick="goHome()" class="hidden text-white text-xl px-1">←</button>
+        <div class="font-semibold text-sm flex-1 text-center" id="headerTitle">SMART CABLE MANAGER</div>
+        <span id="colOfflineBadge" class="hidden text-[10px] font-bold bg-amber-400 text-amber-900 px-1.5 py-0.5 rounded">OFF</span>
+        <span id="colSyncBadge" class="hidden text-[10px] font-bold bg-blue-400 text-white px-1.5 py-0.5 rounded">Sync</span>
+      </div>
+      <div id="agentLabel" class="hidden"></div>
+    </header>
+
+    <div id="page-home" class="page flex-1 overflow-y-auto page-pad bg-slate-100">
+      <div class="px-3 pt-3 pb-2">
+        <div class="flex items-center justify-between mb-1">
+          <div>
+            <div class="text-xs text-slate-500">Collector</div>
+            <div class="font-bold text-slate-900 text-sm" id="dashAgentName">—</div>
+          </div>
+          <div class="text-right">
+            <div class="text-[10px] font-medium text-emerald-600" id="dashOnline">● Online</div>
+            <div class="text-[10px] text-slate-400" id="dashSync">Synced</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TODAY COLLECTION -->
+      <div class="mx-3 mb-3 bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+        <div class="text-[10px] font-semibold tracking-wider text-slate-400 uppercase" data-i18n="todayColl">Today's Collection</div>
+        <div class="text-3xl font-bold text-slate-900 mt-1" id="dToday">₹0</div>
+        <div class="text-xs text-slate-500 mt-0.5"><span id="dTodayCount">0</span> <span data-i18n="custCollected">customers collected</span></div>
+      </div>
+
+      <!-- SUMMARY 2x2 -->
+      <div class="mx-3 mb-3 grid grid-cols-2 gap-2">
+        <div class="bg-white rounded-xl border border-slate-200 p-3">
+          <div class="text-[10px] text-slate-400 uppercase" data-i18n="active">Active</div>
+          <div class="text-xl font-bold text-slate-800" id="dActive">0</div>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 p-3">
+          <div class="text-[10px] text-slate-400 uppercase" data-i18n="paidUp">Paid Up</div>
+          <div class="text-xl font-bold text-emerald-600" id="dPaidCust">0</div>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 p-3">
+          <div class="text-[10px] text-slate-400 uppercase" data-i18n="pending">Pending</div>
+          <div class="text-xl font-bold text-amber-600" id="dUnpaidCust">0</div>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 p-3">
+          <div class="text-[10px] text-slate-400 uppercase" data-i18n="dueAmt">Due Amount</div>
+          <div class="text-lg font-bold text-red-600" id="dUnpaidAmt">₹0</div>
+        </div>
+      </div>
+
+      <!-- ROUTE BY STREET -->
+      <div class="mx-3 mb-3 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="px-4 py-2.5 border-b border-slate-100 flex justify-between items-center">
+          <div class="text-xs font-semibold text-slate-700" data-i18n="todayRoute">Today's Route</div>
+          <button type="button" onclick="showPage('pending')" class="text-[10px] text-blue-600 font-medium">View All →</button>
+        </div>
+        <div id="dashRouteList" class="divide-y divide-slate-100 max-h-48 overflow-y-auto">
+          <div class="p-3 text-xs text-slate-400 text-center">Loading...</div>
+        </div>
+      </div>
+
+      <!-- PENDING PREVIEW -->
+      <div class="mx-3 mb-3 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="px-4 py-2.5 border-b border-slate-100 flex justify-between items-center">
+          <div class="text-xs font-semibold text-slate-700" data-i18n="pendingCust">Pending Customers</div>
+          <button type="button" onclick="showPage('pending')" class="text-[10px] text-blue-600 font-medium">View All →</button>
+        </div>
+        <div id="dashPendingPreview" class="divide-y divide-slate-100">
+          <div class="p-3 text-xs text-slate-400 text-center">—</div>
+        </div>
+      </div>
+
+      <!-- QUICK ACTIONS -->
+      <div class="mx-3 mb-3 grid grid-cols-2 gap-2">
+        <button type="button" onclick="showPage('billing')" class="bg-blue-600 text-white rounded-xl py-3.5 text-sm font-semibold shadow-sm">₹ Collect</button>
+        <button type="button" onclick="showPage('customers')" class="bg-white border border-slate-200 rounded-xl py-3.5 text-sm font-semibold text-slate-700">Search</button>
+        <button type="button" onclick="showPage('pending')" class="bg-white border border-slate-200 rounded-xl py-3.5 text-sm font-semibold text-slate-700">Pending</button>
+        <button type="button" onclick="showPage('colReport')" class="bg-white border border-slate-200 rounded-xl py-3.5 text-sm font-semibold text-slate-700">Report</button>
+      </div>
+
+      <!-- RECENT -->
+      <div class="mx-3 mb-4 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="px-4 py-2.5 border-b border-slate-100 text-xs font-semibold text-slate-700">Recent Collections</div>
+        <div id="dashRecent" class="divide-y divide-slate-100">
+          <div class="p-3 text-xs text-slate-400 text-center">No collections today</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- hidden legacy ids for compatibility -->
+    <div class="hidden">
+      <span id="dDC">0</span><span id="dPending">0</span><span id="dYest">0</span>
+      <span id="dPaidAmt">0</span><span id="dMyTotal">0</span>
+    </div>
+
+<div id="page-customers" class="page hidden flex-1 flex flex-col overflow-hidden">
+      <div class="p-3 bg-white border-b space-y-2">
+        <select id="filterPlace" onchange="onPlaceChange()" class="w-full px-3 py-2 border rounded-lg text-sm"><option value="">- Select Place -</option></select>
+        <select id="filterStreet" onchange="filterCustomers()" class="w-full px-3 py-2 border rounded-lg text-sm"><option value="">- Select Street -</option></select>
+        <div class="flex gap-2 items-center text-sm flex-wrap">
+          <label class="flex items-center gap-1"><input type="checkbox" id="filterDC" onchange="filterCustomers()"> DC</label>
+          <label class="flex items-center gap-1"><input type="checkbox" id="filterACT" checked onchange="filterCustomers()"> Active</label>
+          <button onclick="showPendingOnly()" class="ml-auto bg-blue-600 text-white px-3 py-1 rounded text-xs">Pending</button>
+          <button onclick="showAllCust()" class="bg-red-500 text-white px-3 py-1 rounded text-xs">All</button>
+        </div>
+        <input type="text" id="custSearch" placeholder="Name / Mobile / Box..." oninput="filterCustomers()" class="w-full px-3 py-2 border rounded-lg text-sm">
+      </div>
+      <div id="custList" class="flex-1 overflow-y-auto p-2 space-y-1.5"></div>
+    </div>
+
+    <div id="page-billing" class="page hidden flex-1 flex flex-col overflow-hidden">
+      <div class="p-3 bg-white border-b">
+        <input type="text" id="billSearch" placeholder="Name / Mobile / Box தேடுங்கள்..." oninput="searchBill()" class="w-full px-4 py-3 border rounded-xl text-base outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div id="billResults" class="flex-1 overflow-y-auto p-2 space-y-1.5"><div class="text-center text-slate-400 py-10 text-sm">Customer தேடவும்</div></div>
+    </div>
+
+    <div id="page-ledger" class="page hidden flex-1 flex flex-col overflow-hidden">
+      <div class="p-3 bg-white border-b">
+        <input type="text" id="ledgerSearch" placeholder="Customer தேடி Ledger பார்க்க..." oninput="searchLedger()" class="w-full px-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500">
+        <div id="ledgerSearchResults" class="mt-2 hidden max-h-40 overflow-y-auto border rounded-lg"></div>
+      </div>
+      <div id="ledgerContent" class="flex-1 overflow-y-auto p-3"><div class="text-center text-slate-400 py-10 text-sm">Customer தேர்வு செய்யவும்</div></div>
+    </div>
+
+    <div id="page-colReport" class="page hidden flex-1 flex flex-col overflow-hidden">
+      <div class="p-3 bg-white border-b flex gap-2 items-center">
+        <input type="date" id="colFrom" class="flex-1 px-2 py-2 border rounded-lg text-sm">
+        <input type="date" id="colTo" class="flex-1 px-2 py-2 border rounded-lg text-sm">
+        <button onclick="loadColReport()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm">🔍</button>
+      </div>
+      <div class="grid grid-cols-2 gap-0 bg-white border-b sticky top-0 z-10">
+        <div class="p-2.5 text-center border-r">
+          <div class="text-[10px] text-slate-500 uppercase">Bills</div>
+          <div class="text-lg font-bold text-blue-700" id="colReportCount">0</div>
+        </div>
+        <div class="p-2.5 text-center">
+          <div class="text-[10px] text-slate-500 uppercase">Amount</div>
+          <div class="text-lg font-bold text-emerald-700" id="colReportAmtTop">₹0</div>
+        </div>
+      </div>
+      <div class="bg-blue-700 text-white text-center text-xs py-1.5 font-semibold">COLLECTION LIST</div>
+      <div id="colReportList" class="flex-1 overflow-y-auto"></div>
+      <div class="bg-slate-800 text-white p-2 text-center text-sm font-bold" id="colReportTotal">Total: ₹0 (0)</div>
+    </div>
+
+    <div id="page-pending" class="page hidden flex-1 flex flex-col overflow-hidden">
+      <div class="p-3 bg-white border-b space-y-2">
+        <input type="text" id="pendingSearch" placeholder="Search name / mobile / ID..." oninput="filterPendingList()" class="w-full px-3 py-2.5 border rounded-xl text-sm">
+        <div id="pendingStreetChips" class="flex gap-1.5 overflow-x-auto pb-1 text-xs"></div>
+        <button type="button" onclick="loadPending()" class="w-full bg-blue-600 text-white py-2.5 rounded-xl text-sm font-medium">Refresh Pending</button>
+      </div>
+      <div class="grid grid-cols-2 gap-0 bg-white border-b sticky top-0 z-10">
+        <div class="p-2.5 text-center border-r">
+          <div class="text-[10px] text-slate-500 uppercase">Customers</div>
+          <div class="text-lg font-bold text-red-600" id="pendingCountTop">0</div>
+        </div>
+        <div class="p-2.5 text-center">
+          <div class="text-[10px] text-slate-500 uppercase">Pending ₹</div>
+          <div class="text-lg font-bold text-red-700" id="pendingAmtTop">₹0</div>
+        </div>
+      </div>
+      <div class="bg-blue-700 text-white text-center text-xs py-1.5 font-semibold">PENDING · STREET WISE</div>
+      <div id="pendingList" class="flex-1 overflow-y-auto"></div>
+      <div class="bg-red-700 text-white p-2 text-center text-sm font-bold" id="pendingTotalBar">Total: ₹0 (0)</div>
+    </div>
+
+    <div id="page-settings" class="page hidden flex-1 p-4 page-pad overflow-y-auto">
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 space-y-2 mb-3 dark:bg-slate-800 dark:border-slate-700">
+        <div class="text-xs text-slate-400" data-i18n="loggedIn">Logged in as</div>
+        <div class="font-semibold text-sm" id="settingsEmail">-</div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 mb-3 dark:bg-slate-800 dark:border-slate-700">
+        <div>
+          <label class="text-xs text-slate-500 font-medium" data-i18n="language">Language</label>
+          <select id="colLangSelect" onchange="setCollectorLang(this.value)" class="w-full mt-1 px-3 py-2.5 border rounded-xl text-sm bg-white dark:bg-slate-900 dark:border-slate-600">
+            <option value="en">English</option>
+            <option value="ta">தமிழ்</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-slate-500 font-medium" data-i18n="theme">Theme</label>
+          <select id="colThemeSelect" onchange="setCollectorTheme(this.value)" class="w-full mt-1 px-3 py-2.5 border rounded-xl text-sm bg-white dark:bg-slate-900 dark:border-slate-600">
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden mb-3 divide-y dark:bg-slate-800 dark:border-slate-700">
+        <button type="button" onclick="showPage('ledger')" class="w-full text-left px-4 py-3.5 text-sm font-medium" data-i18n="ledger">📒 Ledger</button>
+        <button type="button" onclick="showPage('colReport')" class="w-full text-left px-4 py-3.5 text-sm font-medium" data-i18n="colReport">📑 Collection Report</button>
+      </div>
+      <button onclick="logout()" class="w-full bg-red-600 text-white py-3.5 rounded-xl font-medium" data-i18n="logout">Logout</button>
+      <p class="text-center text-xs text-slate-400 mt-6">Smart Cable Manager · by JMR Apps</p>
+    </div>
+  </div>
+
+  <div id="collectModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
+    <div class="bg-white w-full rounded-t-2xl p-5 max-h-[85vh] overflow-y-auto">
+      <div class="flex justify-between items-start mb-3 gap-2">
+        <div class="min-w-0 flex-1">
+          <h3 class="font-bold text-lg" id="modalName">-</h3>
+          <p class="text-xs text-slate-500 whitespace-pre-line mt-1" id="modalInfo">-</p>
+          <a id="modalCallBtn" href="#" class="hidden inline-flex mt-2 items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg">📞 Call</a>
+        </div>
+        <button onclick="closeModal()" class="text-2xl text-slate-400 shrink-0">&times;</button>
+      </div>
+      <div class="bg-red-50 rounded-xl p-3 mb-4 flex justify-between"><span class="text-sm text-red-700">Due</span><span class="text-xl font-bold text-red-600" id="modalDue">₹0</span></div>
+      <div class="space-y-3">
+        <div><label class="text-sm font-medium">Amount *</label><input type="number" id="colAmount" class="w-full px-4 py-3 border rounded-xl text-lg font-semibold" inputmode="numeric"></div>
+        <div><label class="text-sm font-medium">Mode</label><select id="colMode" class="w-full px-4 py-3 border rounded-xl"><option value="Cash">Cash</option><option value="UPI">UPI</option><option value="Bank">Bank</option></select></div>
+        <div><label class="text-sm font-medium">Remarks</label><input type="text" id="colRemarks" class="w-full px-4 py-3 border rounded-xl"></div>
+        <button onclick="saveCollection()" id="saveColBtn" class="w-full bg-green-600 text-white font-semibold py-3.5 rounded-xl text-lg">Save Collection</button>
+      </div>
+    </div>
+  </div>
+
+    <!-- Bottom Nav -->
+  <nav id="bottomNav" class="bottom-nav fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200 grid grid-cols-5 text-center shadow-[0_-4px_12px_rgba(0,0,0,.06)] hidden">
+    <button type="button" onclick="goHome()" class="nav-item py-2 text-blue-600" data-nav="home">
+      <div class="text-lg leading-none">⌂</div>
+      <div class="text-[9px] font-medium mt-0.5" data-i18n="home">Home</div>
+    </button>
+    <button type="button" onclick="showPage('customers')" class="nav-item py-2 text-slate-400" data-nav="customers">
+      <div class="text-lg leading-none">◎</div>
+      <div class="text-[9px] font-medium mt-0.5" data-i18n="customers">Customers</div>
+    </button>
+    <button type="button" onclick="showPage('billing')" class="nav-item py-2 text-slate-400" data-nav="billing">
+      <div class="text-lg leading-none">₹</div>
+      <div class="text-[9px] font-medium mt-0.5" data-i18n="collect">Collect</div>
+    </button>
+    <button type="button" onclick="showPage('pending')" class="nav-item py-2 text-slate-400" data-nav="pending">
+      <div class="text-lg leading-none">⚠</div>
+      <div class="text-[9px] font-medium mt-0.5" data-i18n="due">Due</div>
+    </button>
+    <button type="button" onclick="showPage('settings')" class="nav-item py-2 text-slate-400" data-nav="settings">
+      <div class="text-lg leading-none">≡</div>
+      <div class="text-[9px] font-medium mt-0.5" data-i18n="more">More</div>
+    </button>
+  </nav>
+
+  <div id="toast" class="hidden fixed bottom-20 left-1/2 -translate-x-1/2 px-5 py-2.5 rounded-full text-white text-sm z-50 shadow-lg"></div>
+  <script src="collector.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('./sw.js').catch(function (e) { console.log('SW', e); });
+      });
+    }
+  </script>
+</body>
+</html>

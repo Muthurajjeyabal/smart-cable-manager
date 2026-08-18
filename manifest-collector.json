@@ -1,0 +1,26 @@
+{
+  "name": "Smart Cable Manager · Collector",
+  "short_name": "SCM Collect",
+  "description": "Smart Cable Manager — Collector only",
+  "start_url": "./collector.html?source=pwa",
+  "scope": "./",
+  "id": "/smart-cable-manager/collector-app",
+  "display": "standalone",
+  "background_color": "#065f46",
+  "theme_color": "#065f46",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
