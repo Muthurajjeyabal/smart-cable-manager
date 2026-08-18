@@ -641,10 +641,8 @@
                 </div>
                 <div>
                   <label class="block text-xs font-medium mb-1 text-slate-600">Place / Area *</label>
-                  <select id="custPlace" onchange="onPlaceSelect()" class="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white">
+                  <select id="custPlace" onchange="onPlaceSelect()" class="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white" data-area-select>
                     <option value="">- Select Area -</option>
-                    <option value="AREA 1">AREA 1</option>
-                    <option value="AREA 2">AREA 2</option>
                   </select>
                 </div>
                 <div>
@@ -983,10 +981,8 @@
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
               <div>
                 <label class="text-xs text-slate-500">Area</label>
-                <select id="pendFilterArea" onchange="onPendingFilterChange()" class="w-full px-2 py-2 border rounded-lg bg-white">
+                <select id="pendFilterArea" onchange="onPendingFilterChange()" class="w-full px-2 py-2 border rounded-lg bg-white" data-area-select>
                   <option value="">All Areas</option>
-                  <option value="AREA 1">AREA 1</option>
-                  <option value="AREA 2">AREA 2</option>
                 </select>
               </div>
               <div>
@@ -1290,9 +1286,8 @@
                             <div class="flex flex-wrap gap-2 items-end">
                 <div>
                   <label class="text-[10px] text-slate-500">Area</label>
-                  <select id="colRepArea" onchange="renderCollectionReport()" class="block px-3 py-2 border rounded-lg text-sm bg-white">
-                    <option value="AREA 1">AREA 1</option>
-                    <option value="AREA 2">AREA 2</option>
+                  <select id="colRepArea" onchange="renderCollectionReport()" class="block px-3 py-2 border rounded-lg text-sm bg-white" data-area-select>
+                    <option value="">All Areas</option>
                   </select>
                 </div>
                 <button type="button" onclick="renderCollectionReport()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm">Refresh</button>
@@ -1321,10 +1316,8 @@
                 </div>
                 <div>
                   <label class="text-[10px] text-slate-500">Area</label>
-                  <select id="trRepPlace" class="block px-3 py-2 border rounded-lg text-sm bg-white">
+                  <select id="trRepPlace" class="block px-3 py-2 border rounded-lg text-sm bg-white" data-area-select>
                     <option value="">All</option>
-                    <option value="AREA 1">AREA 1</option>
-                    <option value="AREA 2">AREA 2</option>
                   </select>
                 </div>
                 <select id="trRepType" class="px-2 py-2 border rounded-lg text-sm bg-white">
@@ -1363,10 +1356,8 @@
                 </div>
                 <div>
                   <label class="text-[10px] text-slate-500">Area</label>
-                  <select id="agentRepArea" onchange="renderAgentDayReport()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white">
+                  <select id="agentRepArea" onchange="renderAgentDayReport()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white" data-area-select>
                     <option value="ALL">All Areas</option>
-                    <option value="AREA 1">AREA 1</option>
-                    <option value="AREA 2">AREA 2</option>
                   </select>
                 </div>
                 <div>
@@ -1420,10 +1411,8 @@
                 <button type="button" data-chip="DC" onclick="setCustRepChip(this)" class="cust-chip px-3 py-1.5 rounded-full text-xs bg-white border border-slate-200 text-slate-600">DC</button>
               </div>
               <div class="flex flex-wrap gap-2 items-center">
-                <select id="custRepArea" onchange="onCustRepAreaChange()" class="px-2 py-1.5 border rounded-lg text-xs bg-white">
+                <select id="custRepArea" onchange="onCustRepAreaChange()" class="px-2 py-1.5 border rounded-lg text-xs bg-white" data-area-select>
                   <option value="">All Areas</option>
-                  <option value="AREA 1">AREA 1</option>
-                  <option value="AREA 2">AREA 2</option>
                 </select>
                 <select id="custRepStreet" onchange="renderCustomerReport()" class="px-2 py-1.5 border rounded-lg text-xs bg-white max-w-[140px]">
                   <option value="">All Streets</option>
@@ -1462,10 +1451,8 @@
               <div class="grid grid-cols-2 gap-2">
                 <div>
                   <label class="text-[10px] text-slate-500">Area</label>
-                  <select id="dcRepArea" onchange="onDcRepAreaChange()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white">
+                  <select id="dcRepArea" onchange="onDcRepAreaChange()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white" data-area-select>
                     <option value="ALL">All Areas</option>
-                    <option value="AREA 1">AREA 1</option>
-                    <option value="AREA 2">AREA 2</option>
                   </select>
                 </div>
                 <div>
@@ -1512,10 +1499,8 @@
                 </div>
                 <div>
                   <label class="text-[10px] text-slate-500">Area</label>
-                  <select id="pkgRepArea" onchange="onPkgRepAreaChange()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white">
+                  <select id="pkgRepArea" onchange="onPkgRepAreaChange()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white" data-area-select>
                     <option value="ALL">All Areas</option>
-                    <option value="AREA 1">AREA 1</option>
-                    <option value="AREA 2">AREA 2</option>
                   </select>
                 </div>
                 <div class="col-span-2">
@@ -1588,9 +1573,8 @@
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                 <div>
                   <label class="text-xs text-slate-500">Place</label>
-                  <select id="mstPlace" onchange="filterStreetMaster(this.value)" class="w-full px-3 py-2 border rounded-lg bg-white">
-                    <option value="AREA 1">AREA 1</option>
-                    <option value="AREA 2">AREA 2</option>
+                  <select id="mstPlace" onchange="filterStreetMaster(this.value)" class="w-full px-3 py-2 border rounded-lg bg-white" data-area-select>
+                    <option value="">- Select Area -</option>
                   </select>
                 </div>
                 <div>
@@ -1609,10 +1593,8 @@
               </div>
             </div>
             <div class="bg-white rounded-xl border overflow-hidden">
-              <div class="px-3 py-2 bg-slate-50 border-b flex gap-2 text-sm">
-                <button type="button" onclick="filterStreetMaster('ALL')" id="stFilterAll" class="px-3 py-1 rounded-lg bg-slate-200 font-medium">All</button>
-                <button type="button" onclick="filterStreetMaster('AREA 1')" id="stFilter1" class="px-3 py-1 rounded-lg hover:bg-slate-100">AREA 1</button>
-                <button type="button" onclick="filterStreetMaster('AREA 2')" id="stFilter2" class="px-3 py-1 rounded-lg hover:bg-slate-100">AREA 2</button>
+              <div class="px-3 py-2 bg-slate-50 border-b flex gap-2 text-sm flex-wrap" id="stFilterBar">
+                <button type="button" onclick="filterStreetMaster('ALL')" id="stFilterAll" data-filter-val="ALL" class="px-3 py-1 rounded-lg bg-slate-200 font-medium">All</button>
               </div>
               <div class="overflow-x-auto max-h-80 overflow-y-auto">
                 <table class="w-full text-sm"><thead class="bg-slate-50 sticky top-0"><tr>
@@ -1663,11 +1645,18 @@
           <!-- PLACE PANEL -->
           <div id="masterPanel-place" class="master-panel hidden">
             <button type="button" onclick="showMasterPanel(null)" class="text-sm text-blue-600 mb-2">← Back</button>
-            <div class="bg-white rounded-xl border p-4">
-              <h3 class="font-semibold mb-2 text-sm">Place / Area</h3>
-                            <ul class="text-sm space-y-1">
-                <li class="px-3 py-2 bg-slate-50 rounded-lg">AREA 1</li>
-                <li class="px-3 py-2 bg-slate-50 rounded-lg">AREA 2</li>
+            <div class="bg-white rounded-xl border p-4 mb-4">
+              <h3 class="font-semibold mb-3 text-sm">Place / Area Master</h3>
+              <p class="text-xs text-slate-500 mb-3">உங்கள் operator-க்கு எத்தனை areas வேண்டுமானாலும் add பண்ணலாம் — 1, 2, 4, எத்தனை வேணா. இங்க add பண்ணியது தான் New Customer, Reports, Filters எல்லா இடத்திலும் தெரியும்.</p>
+              <input type="hidden" id="editPlaceDocId" value="">
+              <div class="flex gap-2">
+                <input type="text" id="mstPlaceName" placeholder="Area name (எ.கா AREA 1)" class="flex-1 px-3 py-2 border rounded-lg text-sm">
+                <button type="button" onclick="savePlaceMaster()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm">Save</button>
+              </div>
+            </div>
+            <div class="bg-white rounded-xl border overflow-hidden">
+              <ul class="text-sm divide-y" id="placeMasterList">
+                <li class="px-3 py-3 text-slate-400 text-center">Loading...</li>
               </ul>
             </div>
           </div>
@@ -1718,9 +1707,7 @@
                 </div>
                 <div>
                   <label class="text-xs text-slate-500">Area *</label>
-                  <select id="empArea" class="w-full px-3 py-2 border rounded-lg bg-white">
-                    <option value="AREA 1">AREA 1</option>
-                    <option value="AREA 2">AREA 2</option>
+                  <select id="empArea" class="w-full px-3 py-2 border rounded-lg bg-white" data-area-select>
                     <option value="ALL">ALL (Office / Online)</option>
                   </select>
                 </div>
@@ -1865,10 +1852,8 @@
                 </div>
                 <div class="col-span-2">
                   <label class="text-[10px] text-slate-500">Area</label>
-                  <select id="newConnArea" onchange="renderNewConnReport()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white">
+                  <select id="newConnArea" onchange="renderNewConnReport()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white" data-area-select>
                     <option value="ALL">All Areas</option>
-                    <option value="AREA 1">AREA 1</option>
-                    <option value="AREA 2">AREA 2</option>
                   </select>
                 </div>
               </div>
@@ -1895,10 +1880,8 @@
                 </div>
                 <div>
                   <label class="text-[10px] text-slate-500">Area</label>
-                  <select id="payModeArea" onchange="onPayModeAreaChange()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white">
+                  <select id="payModeArea" onchange="onPayModeAreaChange()" class="w-full px-2 py-2 border rounded-lg text-sm bg-white" data-area-select>
                     <option value="ALL">All Areas</option>
-                    <option value="AREA 1">AREA 1</option>
-                    <option value="AREA 2">AREA 2</option>
                   </select>
                 </div>
                 <div>
@@ -2315,9 +2298,8 @@
       <div class="grid grid-cols-2 gap-2">
         <div class="col-span-2">
           <label class="text-[10px] text-slate-500">Area *</label>
-          <select id="transferPlace" onchange="onTransferPlaceChange()" class="w-full px-3 py-2 border rounded-lg text-sm bg-white">
-            <option value="AREA 1">AREA 1</option>
-            <option value="AREA 2">AREA 2</option>
+          <select id="transferPlace" onchange="onTransferPlaceChange()" class="w-full px-3 py-2 border rounded-lg text-sm bg-white" data-area-select>
+            <option value="">- Select Area -</option>
           </select>
         </div>
         <div class="col-span-2">

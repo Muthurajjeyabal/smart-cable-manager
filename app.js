@@ -85,6 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
       loadDashboard();
       loadCustomers();
       if (typeof loadEmployees === 'function') loadEmployees();
+      if (typeof loadPlacesMaster === 'function') loadPlacesMaster();
     } else {
       currentUser = null;
       document.getElementById('loginScreen').classList.remove('hidden');
@@ -566,7 +567,7 @@ async function ledgerQuickTransfer() {
     (c.name || '') + ' · ID: ' + (c.custId || '-') + ' · Due ₹' + Number(c.dueAmt || c.due || 0);
   document.getElementById('transferFromStreet').textContent =
     (c.place || '-') + ' · ' + (c.street || '-');
-  const place = (c.place === 'AREA 2') ? 'AREA 2' : 'AREA 1';
+  const place = c.place || '';
   document.getElementById('transferPlace').value = place;
   document.getElementById('transferDoor').value = c.doorNo || '';
   document.getElementById('transferMso').value = c.mso || '';
@@ -583,7 +584,7 @@ async function ledgerQuickTransfer() {
 }
 
 function onTransferPlaceChange(keepStreet) {
-  const place = document.getElementById('transferPlace')?.value || 'AREA 1';
+  const place = document.getElementById('transferPlace')?.value || '';
   const sel = document.getElementById('transferStreet');
   if (!sel) return;
   const list = (typeof getStreetsForPlace === 'function')
@@ -2852,17 +2853,16 @@ async function loadStreetMaster() {
 
 function filterStreetMaster(f) {
   streetMasterFilter = f || 'ALL';
-  ['stFilterAll', 'stFilter1', 'stFilter2'].forEach((id, i) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    const on = (streetMasterFilter === 'ALL' && i === 0) ||
-               (streetMasterFilter === 'AREA 1' && i === 1) ||
-               (streetMasterFilter === 'AREA 2' && i === 2);
-    el.className = on ? 'px-3 py-1 rounded-lg bg-slate-200 font-medium' : 'px-3 py-1 rounded-lg hover:bg-slate-100';
-  });
-  // sync form place dropdown when filtering by area
+  const bar = document.getElementById('stFilterBar');
+  if (bar) {
+    Array.from(bar.querySelectorAll('button')).forEach(btn => {
+      const on = btn.dataset.filterVal === streetMasterFilter;
+      btn.className = on ? 'px-3 py-1 rounded-lg bg-slate-200 font-medium' : 'px-3 py-1 rounded-lg hover:bg-slate-100';
+    });
+  }
+  // sync form place dropdown when filtering by a specific area
   const placeSel = document.getElementById('mstPlace');
-  if (placeSel && (streetMasterFilter === 'AREA 1' || streetMasterFilter === 'AREA 2')) {
+  if (placeSel && streetMasterFilter !== 'ALL') {
     placeSel.value = streetMasterFilter;
   }
   renderStreetMasterTable();
@@ -2900,7 +2900,7 @@ function editStreetMaster(id) {
   const s = streetMasterCache.find(x => x.id === id);
   if (!s) return;
   document.getElementById('editStreetDocId').value = id;
-  document.getElementById('mstPlace').value = s.place || 'AREA 1';
+  document.getElementById('mstPlace').value = s.place || '';
   document.getElementById('mstStreet').value = s.street || '';
   document.getElementById('mstStreetId').value = s.streetId || '';
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2999,8 +2999,105 @@ function showMasterPanel(name) {
   if (name === 'package') loadPackageMaster();
   if (name === 'mso') loadMsoMaster();
   if (name === 'company') loadCompanyInfo();
+  if (name === 'place') loadPlacesMaster();
+  if (name === 'employee') loadEmployees();
+}
 
-  if (key === 'employee') loadEmployees();
+let placesMasterCache = [];
+
+async function loadPlacesMaster() {
+  const list = document.getElementById('placeMasterList');
+  if (list) list.innerHTML = '<li class="px-3 py-3 text-slate-400 text-center">Loading...</li>';
+  try {
+    const snap = await db.collection('places').get();
+    placesMasterCache = [];
+    snap.forEach(doc => placesMasterCache.push({ id: doc.id, ...doc.data() }));
+    placesMasterCache.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  } catch (e) {
+    console.error('loadPlacesMaster', e);
+    placesMasterCache = [];
+  }
+  renderPlaceMasterList();
+  populateAreaSelects();
+}
+
+function renderPlaceMasterList() {
+  const list = document.getElementById('placeMasterList');
+  if (!list) return;
+  if (!placesMasterCache.length) {
+    list.innerHTML = '<li class="px-3 py-6 text-slate-400 text-center text-xs">இன்னும் area எதுவும் add பண்ணவில்லை. மேலே பெயர் போட்டு Save பண்ணுங்கள்.</li>';
+    return;
+  }
+  list.innerHTML = placesMasterCache.map(p => `
+    <li class="px-3 py-2.5 flex items-center justify-between">
+      <span>${p.name}</span>
+      <button type="button" onclick="deletePlaceMaster('${p.id}')" class="text-xs text-red-600">Delete</button>
+    </li>`).join('');
+}
+
+async function savePlaceMaster() {
+  const nameEl = document.getElementById('mstPlaceName');
+  const name = (nameEl?.value || '').trim();
+  if (!name) { showToast('Area பெயர் போடுங்கள்', true); return; }
+  if (placesMasterCache.some(p => (p.name || '').toUpperCase() === name.toUpperCase())) {
+    showToast('இந்த area ஏற்கனவே இருக்கு', true);
+    return;
+  }
+  try {
+    await db.collection('places').add({ name, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    if (nameEl) nameEl.value = '';
+    showToast('Area added');
+    await loadPlacesMaster();
+  } catch (e) {
+    showToast('Error: ' + e.message, true);
+  }
+}
+
+async function deletePlaceMaster(id) {
+  if (!confirm('இந்த area-ஐ delete பண்ணவா? (இந்த area-வுல இருக்கும் customers/streets பாதிக்கப்படாது, ஆனா dropdown-ல் இனி தெரியாது)')) return;
+  try {
+    await db.collection('places').doc(id).delete();
+    showToast('Deleted');
+    await loadPlacesMaster();
+  } catch (e) {
+    showToast('Error: ' + e.message, true);
+  }
+}
+
+// Populate every area/place <select data-area-select> from placesMasterCache,
+// preserving each select's own leading placeholder/"All" option(s).
+function populateAreaSelects() {
+  document.querySelectorAll('select[data-area-select]').forEach(sel => {
+    const keep = Array.from(sel.options).filter(o => !o.dataset || !o.dataset.dynamicArea);
+    // Remove any previously-added dynamic options, keep the original leading option(s)
+    const leading = Array.from(sel.options).filter(o => o.dataset && o.dataset.dynamicArea ? false : true);
+    sel.innerHTML = '';
+    leading.forEach(o => sel.appendChild(o));
+    placesMasterCache.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.name;
+      opt.textContent = p.name;
+      opt.dataset.dynamicArea = '1';
+      sel.appendChild(opt);
+    });
+  });
+
+  // Rebuild the Street Master area-filter button bar to match configured areas
+  const bar = document.getElementById('stFilterBar');
+  if (bar) {
+    const allBtn = bar.querySelector('#stFilterAll');
+    bar.innerHTML = '';
+    if (allBtn) bar.appendChild(allBtn);
+    placesMasterCache.forEach(p => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'px-3 py-1 rounded-lg hover:bg-slate-100';
+      btn.dataset.filterVal = p.name;
+      btn.textContent = p.name;
+      btn.onclick = () => filterStreetMaster(p.name);
+      bar.appendChild(btn);
+    });
+  }
 }
 
 let packageMasterCache = [];
@@ -3599,7 +3696,7 @@ function clearEmpForm() {
   document.getElementById('empEmail').value = '';
   const pw = document.getElementById('empPassword');
   if (pw) pw.value = '';
-  document.getElementById('empArea').value = 'AREA 1';
+  document.getElementById('empArea').value = 'ALL';
   document.getElementById('empRole').value = 'collector';
 }
 
@@ -3611,7 +3708,7 @@ function editEmployee(id) {
   document.getElementById('empEmail').value = e.email || '';
   const pw = document.getElementById('empPassword');
   if (pw) pw.value = '';
-  document.getElementById('empArea').value = e.area || 'AREA 1';
+  document.getElementById('empArea').value = e.area || 'ALL';
   document.getElementById('empRole').value = e.role || 'collector';
 }
 
@@ -3703,7 +3800,7 @@ function getCollectionReportData(area) {
 }
 
 function renderCollectionReport() {
-  const area = (document.getElementById('colRepArea') || {}).value || 'AREA 1';
+  const area = (document.getElementById('colRepArea') || {}).value || '';
   const box = document.getElementById('colRepPrint');
   const sum = document.getElementById('colRepSummary');
   if (!box) return;
