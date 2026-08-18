@@ -2200,6 +2200,13 @@ function guessStreetId(c) {
 }
 
 function getStreetId(place, street) {
+  // 1) Firestore-backed street master (streetMasterCache) — the real source
+  //    of truth now that operators add their own streets via Setup → Streets.
+  if (typeof streetMasterCache !== 'undefined' && streetMasterCache.length) {
+    const m1 = streetMasterCache.find(s => s.place === place && s.street === street);
+    if (m1 && m1.streetId) return m1.streetId;
+  }
+  // 2) legacy hardcoded list (empty by default, kept for backward compatibility)
   const m = STREET_MASTER.find(s => s.place === place && s.street === street);
   if (m) return m.streetId;
   const same = allCustomers.find(c => c.street === street && c.custId);
