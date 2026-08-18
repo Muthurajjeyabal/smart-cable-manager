@@ -237,8 +237,12 @@ function goBackPage() {
     return;
   }
   if (pageHistory.length > 1) {
+    // Remove the page we're leaving, then PEEK (not pop) at the new top —
+    // popping twice here used to skip a level on every single Back press,
+    // which over a few navigations left stale pages (like the Setup/Masters
+    // hub) stuck in the history and made them resurface unexpectedly later.
     pageHistory.pop();
-    const prev = pageHistory.pop() || 'dashboard';
+    const prev = pageHistory[pageHistory.length - 1] || 'dashboard';
     showPage(prev, true);
   } else {
     showPage('dashboard', true);
