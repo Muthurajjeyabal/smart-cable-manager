@@ -3296,17 +3296,84 @@ function handleImportFile(evt) {
   reader.onload = (e) => {
     try {
       const data = new Uint8Array(e.target.result);
-      const wb = XLSX.read(data, { type: 'array' });
+      const wb = XLSX.read(data, { type: 'array', cellStyles: true });
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
       importParsedRows = rows;
       importMappedRows = rows.map(mapRowToFields);
+      detectStreetColumnColors(sheet);
       renderImportPreview();
     } catch (err) {
       showToast('File படிக்க முடியவில்லை: ' + err.message, true);
     }
   };
   reader.readAsArrayBuffer(file);
+}
+
+// ---- Color-coded collector/area detection ----
+// Some operators mark which field-collector handles a street by coloring
+// that cell in Excel (instead of a text column). We read each row's Street
+// cell background color, group rows by color, and let the admin type a
+// name (collector/area) for each color group before import.
+let importRowColors = [];      // parallel array to importMappedRows: '#rrggbb' or null
+let importColorGroups = {};    // '#rrggbb' -> { count, sampleStreet }
+let importColorLabels = {};    // '#rrggbb' -> area/collector name typed by admin
+
+function detectStreetColumnColors(sheet) {
+  importRowColors = [];
+  importColorGroups = {};
+  importColorLabels = {};
+  const ref = sheet['!ref'];
+  if (!ref || typeof XLSX === 'undefined') return;
+  const range = XLSX.utils.decode_range(ref);
+  let streetColIdx = -1;
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const addr = XLSX.utils.encode_cell({ r: range.s.r, c });
+    const cell = sheet[addr];
+    if (cell && cell.v) {
+      const key = normalizeHeaderKey(cell.v);
+      if (IMPORT_FIELD_ALIASES.street.includes(key)) { streetColIdx = c; break; }
+    }
+  }
+  if (streetColIdx === -1) return;
+  for (let i = 0; i < importMappedRows.length; i++) {
+    const r = range.s.r + 1 + i;
+    const addr = XLSX.utils.encode_cell({ r, c: streetColIdx });
+    const cell = sheet[addr];
+    let color = null;
+    try {
+      const rgb = cell && cell.s && cell.s.fgColor && cell.s.fgColor.rgb;
+      // ignore white / no-fill so "uncoloured" rows stay ungrouped
+      if (rgb && !/^(00)?FFFFFF$/i.test(rgb.slice(-6)) && rgb !== '00000000') {
+        color = '#' + rgb.slice(-6).toUpperCase();
+      }
+    } catch (e) {}
+    importRowColors.push(color);
+    if (color) {
+      if (!importColorGroups[color]) importColorGroups[color] = { count: 0, sampleStreet: importMappedRows[i].street || '' };
+      importColorGroups[color].count++;
+    }
+  }
+}
+
+function renderColorGroupUI() {
+  const wrap = document.getElementById('importColorWrap');
+  const body = document.getElementById('importColorBody');
+  if (!wrap || !body) return;
+  const colors = Object.keys(importColorGroups).filter(c => importColorGroups[c].count >= 3);
+  if (!colors.length) { wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  body.innerHTML = colors.map(c => `
+    <div class="flex items-center gap-2 mb-2">
+      <span class="w-6 h-6 rounded border flex-shrink-0" style="background:${c}"></span>
+      <span class="text-xs text-slate-500 w-20 flex-shrink-0">${importColorGroups[c].count} rows</span>
+      <input type="text" placeholder="Area/Collector name (எ.கா PREM)" data-color="${c}" class="import-color-label flex-1 px-2 py-1.5 border rounded-lg text-sm" oninput="importColorLabels['${c}']=this.value">
+    </div>`).join('') +
+    `<div class="flex items-center gap-2 mb-1">
+      <span class="w-6 h-6 rounded border flex-shrink-0 bg-white"></span>
+      <span class="text-xs text-slate-500 w-20 flex-shrink-0">colour இல்லாதவை</span>
+      <input type="text" placeholder="எ.கா GPAY (optional)" data-color="none" class="import-color-label flex-1 px-2 py-1.5 border rounded-lg text-sm" oninput="importColorLabels['none']=this.value">
+    </div>`;
 }
 
 function renderImportPreview() {
@@ -3323,6 +3390,7 @@ function renderImportPreview() {
   wrap.classList.remove('hidden');
   document.getElementById('importResultWrap')?.classList.add('hidden');
   if (cntEl) cntEl.textContent = importMappedRows.length + ' rows';
+  renderColorGroupUI();
   const cols = ['name', 'mobile', 'custId', 'place', 'street', 'boxNo', 'package', 'dueAmt'];
   head.innerHTML = '<tr>' + cols.map(c => `<th class="px-2 py-1.5 text-left font-medium">${c}</th>`).join('') + '</tr>';
   body.innerHTML = importMappedRows.slice(0, 8).map(r => {
@@ -3342,6 +3410,16 @@ async function runCustomerImport() {
   let added = 0, skipped = 0, errors = 0;
   let placesCreated = 0, streetsCreated = 0;
   const skipReasons = [];
+
+  // Apply the color→area/collector labels (if the admin typed any) onto
+  // each row's place, BEFORE the place/street auto-create step below runs.
+  if (importRowColors && importRowColors.length === importMappedRows.length) {
+    importMappedRows.forEach((r, i) => {
+      const color = importRowColors[i];
+      const label = color ? (importColorLabels[color] || '') : (importColorLabels['none'] || '');
+      if (label && label.trim()) r.place = label.trim();
+    });
+  }
 
   // Make sure we have the latest Place/Street masters before checking
   // what's missing.
