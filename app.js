@@ -3229,19 +3229,19 @@ const IMPORT_TEMPLATE_HEADERS = [
 // still map correctly onto our fields.
 const IMPORT_FIELD_ALIASES = {
   name: ['name', 'customer name', 'customername', 'cust name'],
-  mobile: ['mobile', 'phone', 'mobile no', 'mobileno', 'contact', 'phone no'],
+  mobile: ['mobile', 'phone', 'mobile no', 'mobileno', 'contact', 'phone no', 'mobile number', 'ph no', 'mob'],
   place: ['area', 'place', 'place / area', 'zone'],
   street: ['street', 'street name', 'address', 'road'],
-  custId: ['customer id', 'custid', 'cust id', 'id', 'subscriber id'],
+  custId: ['customer id', 'custid', 'cust id', 'id', 'subscriber id', 's.no', 'sno', 's no', 'sl no', 'sl.no', 'serial no', 'account no', 'accountno', 'account number', 'customer no', 'customerno', 'cust no', 'reg no', 'regno', 'code', 'ref no', 'c id no', 'cid no', 'c id', 'cid'],
   mso: ['mso', 'mso code', 'operator code'],
-  boxNo: ['box no', 'boxno', 'stb no', 'stb number', 'box number'],
+  boxNo: ['box no', 'boxno', 'stb no', 'stb number', 'box number', 'stb', 'settop box no', 'set top box'],
   scNo: ['smart card no', 'sc no', 'scno', 'smart card', 'sc'],
   boxType: ['box type', 'boxtype', 'hd/sd', 'type'],
   package: ['package name', 'package', 'plan', 'plan name'],
   packageAmt: ['package amount', 'amount', 'plan amount', 'monthly amount'],
   dueAmt: ['due amount', 'due', 'balance', 'outstanding'],
   conDate: ['connection date', 'condate', 'joining date', 'install date'],
-  remarks: ['remarks', 'notes', 'comment', 'comments']
+  remarks: ['remarks', 'notes', 'comment', 'comments', 'cut date']
 };
 
 let importParsedRows = [];   // raw objects straight from the sheet
@@ -3323,12 +3323,15 @@ function renderImportPreview() {
   wrap.classList.remove('hidden');
   document.getElementById('importResultWrap')?.classList.add('hidden');
   if (cntEl) cntEl.textContent = importMappedRows.length + ' rows';
-  const cols = ['name', 'mobile', 'place', 'street', 'boxNo', 'package', 'dueAmt'];
+  const cols = ['name', 'mobile', 'custId', 'place', 'street', 'boxNo', 'package', 'dueAmt'];
   head.innerHTML = '<tr>' + cols.map(c => `<th class="px-2 py-1.5 text-left font-medium">${c}</th>`).join('') + '</tr>';
   body.innerHTML = importMappedRows.slice(0, 8).map(r => {
     const missing = !r.name || !r.mobile;
     return `<tr class="border-t ${missing ? 'bg-red-50' : ''}">` +
-      cols.map(c => `<td class="px-2 py-1.5">${r[c] || '-'}</td>`).join('') + '</tr>';
+      cols.map(c => {
+        const val = c === 'boxNo' ? (r.boxNo || r.scNo || '') : r[c];
+        return `<td class="px-2 py-1.5">${val || '-'}</td>`;
+      }).join('') + '</tr>';
   }).join('') + (importMappedRows.length > 8 ? `<tr><td colspan="${cols.length}" class="px-2 py-1.5 text-center text-slate-400">+ ${importMappedRows.length - 8} more rows</td></tr>` : '');
 }
 
@@ -3412,6 +3415,10 @@ async function runCustomerImport() {
           custId = streetId + nextNum;
         } catch (ge) { /* leave custId blank if generation fails */ }
       }
+      // Some operators only track one identifier (Smart Card No) and use it
+      // as their effective Box/STB number too — if the file has no separate
+      // Box No column, fall back to Smart Card No so nothing gets lost.
+      const boxNoVal = r.boxNo || r.scNo || '';
       const data = {
         name: r.name,
         mobile: r.mobile,
@@ -3419,7 +3426,7 @@ async function runCustomerImport() {
         street,
         custId,
         mso: r.mso || '',
-        boxNo: r.boxNo || '',
+        boxNo: boxNoVal,
         scNo: r.scNo || '',
         smartCard: r.scNo || '',
         boxType: r.boxType || 'SD',
