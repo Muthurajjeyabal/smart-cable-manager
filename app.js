@@ -3633,6 +3633,42 @@ async function loadMsoMaster() {
       </td>
     </tr>`).join('') || '<tr><td colspan="2" class="text-center py-4 text-slate-400">Empty — add your MSOs above</td></tr>';
   refreshCustomerMsoDropdown();
+  const bulkSel = document.getElementById('bulkMsoSelect');
+  if (bulkSel) {
+    bulkSel.innerHTML = '<option value="">- Select MSO -</option>' +
+      msoMasterCache.map(m => `<option value="${m.name}">${m.name}</option>`).join('');
+  }
+}
+
+async function bulkAssignMso() {
+  const sel = document.getElementById('bulkMsoSelect');
+  const statusEl = document.getElementById('bulkMsoStatus');
+  const msoName = sel?.value || '';
+  if (!msoName) { showToast('MSO தேர்ந்தெடுங்கள்', true); return; }
+  if (!confirm(`எல்லா customers-க்கும் MSO = "${msoName}" ஆக set பண்ணவா? (already MSO இருக்கும் customers-உம் மாறும்)`)) return;
+
+  try {
+    if (statusEl) statusEl.textContent = 'Loading customers...';
+    const snap = await col('customers').get();
+    const docs = snap.docs;
+    const total = docs.length;
+    let done = 0;
+    for (let i = 0; i < docs.length; i += 400) {
+      const batch = db.batch();
+      docs.slice(i, i + 400).forEach(d => {
+        batch.update(d.ref, { mso: msoName, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      });
+      await batch.commit();
+      done += Math.min(400, docs.length - i);
+      if (statusEl) statusEl.textContent = `Updating... ${done}/${total}`;
+    }
+    if (statusEl) statusEl.textContent = `✓ Done — ${total} customers-க்கும் MSO "${msoName}" set ஆயிடுச்சு.`;
+    showToast('Bulk MSO update முடிந்தது');
+    await loadCustomers();
+  } catch (e) {
+    if (statusEl) statusEl.textContent = '';
+    showToast('Error: ' + e.message, true);
+  }
 }
 
 function editMsoMaster(id) {

@@ -1675,6 +1675,17 @@
                 <th class="text-left px-3 py-2">MSO</th><th class="text-left px-3 py-2">Action</th>
               </tr></thead><tbody id="msoMasterBody"></tbody></table>
             </div>
+            <div class="bg-white rounded-xl border p-4 mt-4">
+              <h3 class="font-semibold mb-1 text-sm">Bulk Assign MSO</h3>
+              <p class="text-xs text-slate-500 mb-3">உங்களுக்கு ஒரே ஒரு MSO தான் இருந்தா, இதை வெச்சு <b>எல்லா customers-க்கும் ஒரே தடவையில்</b> அந்த MSO-ஐ assign பண்ணலாம் — ஒவ்வொரு customer-ஐயும் தனித்தனியா edit பண்ண வேண்டாம்.</p>
+              <div class="flex gap-2">
+                <select id="bulkMsoSelect" class="flex-1 px-3 py-2 border rounded-lg text-sm bg-white">
+                  <option value="">- Select MSO -</option>
+                </select>
+                <button type="button" onclick="bulkAssignMso()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm">Apply to All</button>
+              </div>
+              <p id="bulkMsoStatus" class="text-xs text-slate-500 mt-2"></p>
+            </div>
           </div>
 
           <!-- PLACE PANEL -->
