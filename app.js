@@ -6038,7 +6038,14 @@ function renderCustomerReport() {
   if (sort === 'name') list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ta'));
   else if (sort === 'dueHigh') list.sort((a, b) => Number(b.dueAmt || b.due || 0) - Number(a.dueAmt || a.due || 0));
   else if (sort === 'dueLow') list.sort((a, b) => Number(a.dueAmt || a.due || 0) - Number(b.dueAmt || b.due || 0));
-  else list.sort((a, b) => String(a.custId || '').localeCompare(String(b.custId || '')));
+  else list.sort((a, b) => {
+    const aid = String(a.custId || '').trim();
+    const bid = String(b.custId || '').trim();
+    if (!aid && !bid) return 0;
+    if (!aid) return 1;  // blank IDs sort to the end, not the top
+    if (!bid) return -1;
+    return aid.localeCompare(bid, undefined, { numeric: true, sensitivity: 'base' });
+  });
 
   const sum = document.getElementById('custRepSummary');
   if (sum) sum.textContent = list.length + ' showing';
