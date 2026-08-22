@@ -4070,13 +4070,22 @@ function globalCustomerSearch(openFirst) {
     box.innerHTML = '';
     return;
   }
-  const matches = allCustomers.filter(c =>
+  let matches = allCustomers.filter(c =>
     (c.name || '').toLowerCase().includes(q) ||
     (c.mobile || '').includes(q) ||
     (c.boxNo || '').toLowerCase().includes(q) ||
     (c.custId || '').toLowerCase().includes(q) ||
     (c.street || '').toLowerCase().includes(q)
-  ).slice(0, 15);
+  );
+  // Exact Customer ID match(es) first — e.g. searching "1D" should surface
+  // the customer whose ID literally IS "1D" at the very top, ahead of every
+  // mobile number that merely contains "1d" somewhere in it.
+  matches.sort((a, b) => {
+    const aExact = String(a.custId || '').toLowerCase() === q ? 0 : 1;
+    const bExact = String(b.custId || '').toLowerCase() === q ? 0 : 1;
+    return aExact - bExact;
+  });
+  matches = matches.slice(0, 15);
   if (!matches.length) {
     box.innerHTML = '<div class="p-3 text-sm text-slate-400">No match</div>';
     box.classList.remove('hidden');
@@ -4088,9 +4097,10 @@ function globalCustomerSearch(openFirst) {
     return;
   }
   box.innerHTML = matches.map(c => `
-    <div class="p-3 hover:bg-slate-700 cursor-pointer border-b border-slate-700 text-sm" onclick="globalPickCustomer('${c.id}')">
-      <div class="font-medium text-white">${c.name || '-'}</div>
-      <div class="text-xs text-slate-400">${c.custId || ''} · ${c.mobile || '-'} · Box ${c.boxNo || '-'} · Due ₹${Number(c.dueAmt||c.due||0)} · ${c.street || ''}</div>
+    <div class="p-3 hover:bg-slate-100 cursor-pointer border-b border-slate-100 text-sm" onclick="globalPickCustomer('${c.id}')">
+      <div class="font-medium text-slate-900 truncate">${c.name || '-'}</div>
+      <div class="text-xs text-slate-500 mt-0.5 break-words">${c.custId || ''} · ${c.mobile || '-'}</div>
+      <div class="text-xs text-slate-500 break-words">Box ${c.boxNo || '-'} · Due ₹${Number(c.dueAmt||c.due||0)} · ${c.street || ''}</div>
     </div>`).join('');
   box.classList.remove('hidden');
 }
