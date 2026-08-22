@@ -6015,10 +6015,10 @@ function renderCustomerReport() {
   const stats = document.getElementById('custRepStats');
   if (stats) {
     stats.innerHTML = `
-      <div class="bg-white border rounded-xl p-2.5 text-center"><div class="text-lg font-bold text-slate-800">${nTotal.toLocaleString('en-IN')}</div><div class="text-[10px] text-slate-400">Total</div></div>
-      <div class="bg-white border rounded-xl p-2.5 text-center"><div class="text-lg font-bold text-emerald-600">${nAct.toLocaleString('en-IN')}</div><div class="text-[10px] text-slate-400">Active</div></div>
-      <div class="bg-white border rounded-xl p-2.5 text-center"><div class="text-lg font-bold text-red-500">${nDc}</div><div class="text-[10px] text-slate-400">DC</div></div>
-      <div class="bg-white border rounded-xl p-2.5 text-center"><div class="text-lg font-bold text-amber-600">₹${totalDue.toLocaleString('en-IN')}</div><div class="text-[10px] text-slate-400">Total Due</div></div>`;
+      <div class="bg-white border rounded-xl p-2.5 text-center min-w-0 overflow-hidden"><div class="text-lg font-bold text-slate-800 truncate">${nTotal.toLocaleString('en-IN')}</div><div class="text-[10px] text-slate-400">Total</div></div>
+      <div class="bg-white border rounded-xl p-2.5 text-center min-w-0 overflow-hidden"><div class="text-lg font-bold text-emerald-600 truncate">${nAct.toLocaleString('en-IN')}</div><div class="text-[10px] text-slate-400">Active</div></div>
+      <div class="bg-white border rounded-xl p-2.5 text-center min-w-0 overflow-hidden"><div class="text-lg font-bold text-red-500 truncate">${nDc}</div><div class="text-[10px] text-slate-400">DC</div></div>
+      <div class="bg-white border rounded-xl p-2.5 text-center min-w-0 overflow-hidden"><div class="text-lg font-bold text-amber-600 truncate">₹${totalDue.toLocaleString('en-IN')}</div><div class="text-[10px] text-slate-400">Total Due</div></div>`;
   }
 
   if (st === 'DC') list = list.filter(c => String(c.status || '').toUpperCase() === 'DC');
