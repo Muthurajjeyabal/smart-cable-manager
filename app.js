@@ -2699,6 +2699,69 @@ async function upsertBoxStock(boxNo, data) {
   }
 }
 
+// One-time repair tool: for any customer that HAS a Box No but has no
+// matching entry in the boxes stock collection (e.g. customers created via
+// bulk Excel import before this sync was added), create that missing
+// boxes entry. Existing boxes entries are left untouched.
+async function syncBoxStockFromCustomers() {
+  const btn = document.getElementById('syncBoxBtn');
+  const statusEl = document.getElementById('syncBoxStatus');
+  if (btn) { btn.disabled = true; btn.textContent = 'Syncing...'; }
+  try {
+    if (statusEl) statusEl.textContent = 'Loading customers & existing box stock...';
+    const custSnap = await col('customers').get();
+    const boxSnap = await col('boxes').get();
+    const existingBoxNos = new Set();
+    boxSnap.forEach(d => {
+      const bn = String((d.data() || {}).boxNo || '').trim();
+      if (bn) existingBoxNos.add(bn);
+    });
+
+    const toCreate = [];
+    custSnap.forEach(d => {
+      const c = d.data() || {};
+      const bn = String(c.boxNo || '').trim();
+      if (!bn || existingBoxNos.has(bn)) return;
+      existingBoxNos.add(bn); // avoid duplicate creates if 2 customers share a typo'd box no
+      toCreate.push({
+        boxNo: bn,
+        status: (String(c.status || 'ACT').toUpperCase() === 'ACT') ? 'assigned' : 'available',
+        customerId: d.id,
+        customerName: c.name || '',
+        mso: c.mso || '',
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    });
+
+    const total = toCreate.length;
+    if (!total) {
+      if (statusEl) statusEl.textContent = '✓ எல்லாம் ஏற்கனவே sync ஆகி இருக்கு — புதிதா ஒன்றும் சேர்க்கத் தேவையில்லை.';
+      showToast('Already in sync');
+      return;
+    }
+    let done = 0;
+    for (let i = 0; i < toCreate.length; i += 400) {
+      const batch = db.batch();
+      toCreate.slice(i, i + 400).forEach(item => {
+        batch.set(col('boxes').doc(), item);
+      });
+      await batch.commit();
+      done += Math.min(400, toCreate.length - i);
+      if (statusEl) statusEl.textContent = `Syncing... ${done}/${total}`;
+    }
+    if (statusEl) statusEl.textContent = `✓ Done — ${total} box entries add ஆயின.`;
+    showToast('Box stock sync முடிந்தது · ' + total + ' added');
+    if (typeof loadBoxes === 'function') { try { await loadBoxes(); } catch (e) {} }
+    if (typeof loadDashboard === 'function') loadDashboard(true);
+  } catch (e) {
+    if (statusEl) statusEl.textContent = '';
+    showToast('Error: ' + e.message, true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Sync Now'; }
+  }
+}
+
 async function loadBoxes() {
   try {
     const snap = await col('boxes').get();
@@ -3522,7 +3585,24 @@ async function runCustomerImport() {
         importedAt: firebase.firestore.FieldValue.serverTimestamp(),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       };
-      await col('customers').add(data);
+      const ref = await col('customers').add(data);
+      // Keep the separate Box Stock collection in sync too — otherwise the
+      // Dashboard's "Total Box" count silently switches from a live
+      // customer-based estimate to this (initially empty) collection the
+      // moment even one box gets tracked there manually.
+      if (boxNoVal && String(boxNoVal).trim()) {
+        try {
+          await upsertBoxStock(String(boxNoVal).trim(), {
+            status: 'assigned',
+            customerId: ref.id,
+            customerName: data.name || '',
+            mso: data.mso || '',
+            scNo: data.scNo || '',
+            boxType: data.boxType || 'SD',
+            source: 'import'
+          });
+        } catch (be) { console.error('box stock sync failed', be); }
+      }
       added++;
     } catch (e) {
       errors++;

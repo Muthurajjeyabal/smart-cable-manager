@@ -1078,6 +1078,13 @@
           </div>
 
           <div class="bg-white rounded-xl shadow-sm border p-4 mb-4">
+            <h3 class="font-semibold mb-1 text-sm">Sync Box Stock from Customers</h3>
+            <p class="text-xs text-slate-500 mb-3">Excel Import (அல்லது வேற எந்த வழியிலும்) customers-ல் Box No இருந்தும், அது இங்க Box Stock-ல் தெரியலைன்னா, இதை press பண்ணுங்கள் — customer records-ல் இருக்கும் Box No-க்களை இங்க sync பண்ணும். Existing entries மாறாது, missing ஒன்று மட்டும் add ஆகும்.</p>
+            <button type="button" onclick="syncBoxStockFromCustomers()" id="syncBoxBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium">Sync Now</button>
+            <p id="syncBoxStatus" class="text-xs text-slate-500 mt-2"></p>
+          </div>
+
+          <div class="bg-white rounded-xl shadow-sm border p-4 mb-4">
             <h3 class="font-semibold mb-3 text-sm">Purchase / Add Box</h3>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
               <div>
