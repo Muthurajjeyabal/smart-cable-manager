@@ -370,45 +370,47 @@ async function loadCustomers() {
   } catch (err) {
     console.error(err);
     document.getElementById('customerTableBody').innerHTML =
-      `<tr><td colspan="7" class="text-center py-8 text-red-500">Error: ${err.message}</td></tr>`;
+      `<div class="text-center py-8 text-red-500">Error: ${err.message}</div>`;
   }
 }
 
 function renderCustomerTable(list) {
-  const tbody = document.getElementById('customerTableBody');
+  const wrap = document.getElementById('customerTableBody');
+  if (!wrap) return;
   if (list.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-slate-400">No customers found</td></tr>`;
+    wrap.innerHTML = `<div class="text-center py-8 text-slate-400">No customers found</div>`;
     return;
   }
 
-  tbody.innerHTML = list.map(c => {
+  wrap.innerHTML = list.map(c => {
     const due = Number(c.dueAmt || c.due || 0);
     const status = c.status || 'ACT';
     const street = c.street || '';
+    const idLabel = c.custId || c.id.slice(0, 6);
     return `
-    <tr class="border-t border-slate-100 hover:bg-blue-50 cursor-pointer" onclick="viewLedger('${c.id}')">
-      <td class="px-3 py-2.5 font-mono text-xs">${c.custId || c.id.slice(0,6)}</td>
-      <td class="px-3 py-2.5">
-        <div class="font-medium text-sm">${c.name || '-'}</div>
-        <div class="text-[10px] text-slate-500 truncate max-w-[140px]">${street}</div>
-      </td>
-      <td class="px-3 py-2.5 text-sm">${c.mobile || '-'}</td>
-      <td class="px-3 py-2.5 font-mono text-xs">${c.boxNo || '-'}</td>
-      <td class="px-3 py-2.5 text-sm font-semibold ${due > 0 ? 'text-red-600' : 'text-slate-500'}">₹${due}</td>
-      <td class="px-3 py-2.5">
-        <span class="px-2 py-0.5 rounded-full text-xs font-medium ${status === 'ACT' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
-          ${status}
-        </span>
-      </td>
-      <td class="px-3 py-2.5 whitespace-nowrap" onclick="event.stopPropagation()">
-        <button onclick="editCustomer('${c.id}')" class="text-blue-600 hover:underline text-xs mr-1">Edit</button>
-        <button onclick="toggleDC('${c.id}', '${status}')" class="text-xs mr-1 ${status === 'ACT' ? 'text-red-600' : 'text-green-600'} hover:underline">
+    <div class="px-3 py-3 active:bg-blue-50" onclick="viewLedger('${c.id}')">
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-medium text-sm">${c.name || '-'}</span>
+            <span class="px-1.5 py-0.5 rounded-full text-[10px] font-medium flex-shrink-0 ${status === 'ACT' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">${status}</span>
+          </div>
+          <div class="text-[11px] text-slate-500 truncate mt-0.5">${idLabel} · ${street || '-'}</div>
+          <div class="text-[11px] text-slate-500 mt-0.5">${c.mobile || '-'}${c.boxNo ? ' · Box ' + c.boxNo : ''}</div>
+        </div>
+        <div class="text-right flex-shrink-0">
+          <div class="text-sm font-semibold ${due > 0 ? 'text-red-600' : 'text-slate-400'}">₹${due}</div>
+        </div>
+      </div>
+      <div class="flex gap-3 mt-2 pt-2 border-t border-slate-50" onclick="event.stopPropagation()">
+        <button onclick="editCustomer('${c.id}')" class="text-blue-600 text-xs font-medium">Edit</button>
+        <button onclick="toggleDC('${c.id}', '${status}')" class="text-xs font-medium ${status === 'ACT' ? 'text-red-600' : 'text-green-600'}">
           ${status === 'ACT' ? 'DC' : 'RC'}
         </button>
-        <button onclick="deleteCustomer('${c.id}')" class="text-red-700 hover:underline text-xs font-medium">Del</button>
-        <button onclick="openWhatsApp('${c.mobile || ''}', '${(c.name || '').replace(/'/g, '')}', ${Number(c.dueAmt||c.due||0)})" class="text-green-600 hover:underline text-xs">WA</button>
-      </td>
-    </tr>`;
+        <button onclick="deleteCustomer('${c.id}')" class="text-red-700 text-xs font-medium">Del</button>
+        <button onclick="openWhatsApp('${c.mobile || ''}', '${(c.name || '').replace(/'/g, '')}', ${Number(c.dueAmt||c.due||0)})" class="text-green-600 text-xs font-medium">WA</button>
+      </div>
+    </div>`;
   }).join('');
 }
 
